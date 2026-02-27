@@ -173,20 +173,44 @@ h2, h3 { margin: 10px 0; }
   color: #666;
 }
 
+.add-task {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .add-task input {
-  margin-right: 5px;
-  padding: 4px;
+  padding: 6px 8px;
   border-radius: 4px;
   border: none;
+  font-size: 0.95em;
+}
+
+.add-task .section-select {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: none;
+  font-size: 0.95em;
+  background-color: #fff;
+  color: #333;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.add-task .section-select:focus {
+  outline: 2px solid #ffd700;
 }
 
 .add-task button {
   background-color: #fff;
   color: #0033a0;
   border: none;
-  padding: 5px 10px;
+  padding: 6px 12px;
   border-radius: 5px;
   cursor: pointer;
+  font-weight: 600;
 }
 
 .section-card {
