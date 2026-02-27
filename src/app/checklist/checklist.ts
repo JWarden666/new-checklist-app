@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -129,7 +129,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     ];
   }
 
-  constructor() {
+  constructor(private cdr: ChangeDetectorRef) {
     this.tasks = this.getDefaultTasks();
   }
 
@@ -193,6 +193,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       console.error('Cloud load failed, falling back to local:', err);
       this.syncStatus = 'offline';
       this.loadTodayTasksLocal();
+    } finally {
+      this.cdr.markForCheck();
     }
   }
 
@@ -231,6 +233,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       this.saveTasksToLocal();
     } finally {
       this.isSaving = false;
+      this.cdr.markForCheck();
     }
   }
 
@@ -264,6 +267,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
           this.tasks = data.tasks;
           this.saveTasksToLocal();
           this.syncStatus = 'synced';
+          this.cdr.markForCheck();
         }
       }
     } catch {
@@ -293,6 +297,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       this.syncStatus = 'error';
     } finally {
       this.isRefreshing = false;
+      this.cdr.markForCheck();
     }
 
     // Also refresh history list if the panel is open
@@ -449,10 +454,12 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       .then((data: HistorySummary[]) => {
         this.historyList = data;
         this.historyLoading = false;
+        this.cdr.markForCheck();
       })
       .catch(err => {
         console.error('Failed to load history list:', err);
         this.historyLoading = false;
+        this.cdr.markForCheck();
       });
   }
 
@@ -471,8 +478,12 @@ export class ChecklistComponent implements OnInit, OnDestroy {
         this.historyTasks = data.tasks;
         this.historyCompletion = data.completionPercentage;
         this.selectedHistoryDate = date;
+        this.cdr.markForCheck();
       })
-      .catch(() => alert('No history found for this date'));
+      .catch(() => {
+        alert('No history found for this date');
+        this.cdr.markForCheck();
+      });
   }
 
   closeHistoryDetail() {
