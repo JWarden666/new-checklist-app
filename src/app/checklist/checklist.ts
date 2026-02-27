@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -29,7 +29,7 @@ export interface HistorySummary {
   templateUrl: './checklist.html',
   styleUrls: ['./checklist.css']
 })
-export class ChecklistComponent implements OnInit {
+export class ChecklistComponent implements OnInit, OnDestroy {
   currentDate: string = '';
   searchDate: string = '';
   tasks: Task[] = [];
@@ -44,6 +44,13 @@ export class ChecklistComponent implements OnInit {
   newTaskName: string = '';
   newTaskSection: string = '';
 
+  // Cloud sync state
+  syncStatus: 'synced' | 'syncing' | 'offline' | 'error' = 'synced';
+  cloudVersion: number = 0;
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private isSaving: boolean = false;
+
   get currentCompletionPercentage(): number {
     if (this.tasks.length === 0) return 0;
     return Math.round(
@@ -55,9 +62,8 @@ export class ChecklistComponent implements OnInit {
     return this.tasks.filter(t => t.completed).length;
   }
 
-  constructor() {
-    // Initialize your tasks
-    this.tasks = [
+  private getDefaultTasks(): Task[] {
+    return [
     { section: 'Period', name: 'Adult Bev Display Compliance First Wednesday of the Period', completed: false },
     { section: 'Daily To Do', name: 'Emergency Exit Survey', completed: false },
     { section: 'Daily To Do', name: 'Wall To Wall - Bakery', completed: false },
@@ -117,20 +123,147 @@ export class ChecklistComponent implements OnInit {
     { section: 'Observations', name: 'Fix and Fills - PM', completed: false },
     { section: 'Observations', name: 'Product Date Management', completed: false },
     { section: 'Observations', name: 'Top Stock', completed: false },
-  ];
+    ];
+  }
+
+  constructor() {
+    this.tasks = this.getDefaultTasks();
   }
 
   ngOnInit(): void {
     const today = new Date();
     this.currentDate = today.toLocaleDateString();
-    this.loadTodayTasks();
+    this.loadFromCloud();
+    this.startPolling();
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+  }
+
+  // ------------------- Cloud Sync -------------------
+  private getDateKey(): string {
+    return encodeURIComponent(this.currentDate);
+  }
+
+  async loadFromCloud(): Promise<void> {
+    this.syncStatus = 'syncing';
+    try {
+      const res = await fetch(`/api/checklist/${this.getDateKey()}`);
+      if (!res.ok) throw new Error('Failed to load');
+
+      const data = await res.json();
+      if (data.exists && data.tasks && data.tasks.length > 0) {
+        this.tasks = data.tasks;
+        this.cloudVersion = data.version;
+      } else {
+        // No cloud data yet — use defaults (or localStorage as migration)
+        const localKey = `checklist-${this.currentDate}`;
+        const saved = localStorage.getItem(localKey);
+        if (saved) {
+          this.tasks = JSON.parse(saved);
+        }
+        // Push initial state to cloud
+        await this.saveToCloud();
+      }
+      this.syncStatus = 'synced';
+    } catch (err) {
+      console.error('Cloud load failed, falling back to local:', err);
+      this.syncStatus = 'offline';
+      this.loadTodayTasksLocal();
+    }
+  }
+
+  private async saveToCloud(): Promise<void> {
+    if (this.isSaving) return;
+    this.isSaving = true;
+    this.syncStatus = 'syncing';
+
+    try {
+      const payload = {
+        date: this.currentDate,
+        tasks: this.tasks.map(t => ({
+          section: t.section,
+          name: t.name,
+          completed: t.completed,
+        })),
+      };
+
+      const res = await fetch(`/api/checklist/${this.getDateKey()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error('Failed to save');
+
+      const data = await res.json();
+      this.cloudVersion = data.version;
+      this.syncStatus = 'synced';
+
+      // Also save to localStorage as backup
+      this.saveTasksToLocal();
+    } catch (err) {
+      console.error('Cloud save failed:', err);
+      this.syncStatus = 'error';
+      this.saveTasksToLocal();
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
+  private debouncedSaveToCloud(): void {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+    this.saveTimeout = setTimeout(() => {
+      this.saveToCloud();
+      this.saveCompletionPercentage();
+    }, 500);
+  }
+
+  private async pollForChanges(): Promise<void> {
+    if (this.isSaving) return;
+
+    try {
+      const res = await fetch(`/api/checklist/${this.getDateKey()}`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (data.exists && data.version > this.cloudVersion) {
+        // Newer version available — update local state
+        this.cloudVersion = data.version;
+        this.tasks = data.tasks;
+        this.saveTasksToLocal();
+        this.syncStatus = 'synced';
+      }
+    } catch {
+      // Silent fail on poll — will retry next interval
+    }
+  }
+
+  private startPolling(): void {
+    // Poll every 3 seconds for changes from other users
+    this.pollInterval = setInterval(() => {
+      this.pollForChanges();
+    }, 3000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
   }
 
   // ------------------- Task Management -------------------
   toggleTask(task: Task) {
     task.completed = !task.completed;
     this.saveTasksToLocal();
-    this.saveCompletionPercentage();
+    this.debouncedSaveToCloud();
   }
 
   saveCompletionPercentage() {
@@ -180,6 +313,7 @@ export class ChecklistComponent implements OnInit {
     this.newTaskName = '';
     this.newTaskSection = '';
     this.saveTasksToLocal();
+    this.debouncedSaveToCloud();
   }
 
   startEditing(task: Task) {
@@ -191,6 +325,7 @@ export class ChecklistComponent implements OnInit {
     task.name = newName.trim();
     task.editing = false;
     this.saveTasksToLocal();
+    this.debouncedSaveToCloud();
   }
 
   cancelEdit(task: Task) {
@@ -202,6 +337,7 @@ export class ChecklistComponent implements OnInit {
     this.tasks = this.tasks.filter(t => t !== task);
     if (this.selectedTask === task) this.selectedTask = null;
     this.saveTasksToLocal();
+    this.debouncedSaveToCloud();
   }
 
   // ------------------- History / Local Storage -------------------
@@ -210,7 +346,7 @@ export class ChecklistComponent implements OnInit {
     localStorage.setItem(key, JSON.stringify(this.tasks));
   }
 
-  loadTodayTasks() {
+  private loadTodayTasksLocal() {
     const key = `checklist-${this.currentDate}`;
     const saved = localStorage.getItem(key);
     if (saved) this.tasks = JSON.parse(saved);

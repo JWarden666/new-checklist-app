@@ -10,6 +10,69 @@
 
 h2, h3 { margin: 10px 0; }
 
+/* Cloud Sync Status */
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8em;
+  font-weight: 600;
+  margin-bottom: 10px;
+  width: fit-content;
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.sync-synced {
+  background-color: rgba(67, 160, 71, 0.15);
+  color: #2e7d32;
+}
+
+.sync-synced .sync-dot {
+  background-color: #43a047;
+}
+
+.sync-syncing {
+  background-color: rgba(251, 140, 0, 0.15);
+  color: #e65100;
+}
+
+.sync-syncing .sync-dot {
+  background-color: #fb8c00;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.sync-offline {
+  background-color: rgba(158, 158, 158, 0.15);
+  color: #616161;
+}
+
+.sync-offline .sync-dot {
+  background-color: #9e9e9e;
+}
+
+.sync-error {
+  background-color: rgba(229, 57, 53, 0.15);
+  color: #c62828;
+}
+
+.sync-error .sync-dot {
+  background-color: #e53935;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 /* Today's Completion Bar */
 .today-completion-bar {
   background-color: #fff;
