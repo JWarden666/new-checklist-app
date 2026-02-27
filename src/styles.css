@@ -1,1 +1,12 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global styles */
+body {
+  background-color: #0046B8; /* Kroger blue */
+  margin: 0;
+  font-family: Arial, sans-serif;
+  min-height: 100vh;
+  color: #e7cf1e;
+}
+
+* {
+  box-sizing: border-box;
+}

@@ -4,7 +4,9 @@ import { App } from './app';
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [App],
+      declarations: [
+        App
+      ],
     }).compileComponents();
   });
 
@@ -18,6 +20,6 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, new-checklist-app');
+    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, checklist-app');
   });
 });

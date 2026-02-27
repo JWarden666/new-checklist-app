@@ -1,0 +1,54 @@
+<div class="checklist-container">
+  <h2>Checklist - {{ currentDate }}</h2>
+
+  <!-- History Search -->
+  <div class="history-search">
+    <label for="historyDate">Search History:</label>
+    <input type="date" [(ngModel)]="searchDate" id="historyDate" />
+    <button (click)="loadHistory()">Search</button>
+  </div>
+
+  <!-- History Display -->
+  <div class="history-box" *ngIf="historyTasks.length">
+    <h3>History for {{ searchDate }}</h3>
+    <p>Completion: {{ historyCompletion }}%</p>
+    <ul>
+      <li *ngFor="let task of historyTasks">
+        {{ task.name }} - {{ task.completed ? '✅' : '❌' }}
+      </li>
+    </ul>
+  </div>
+
+  <!-- Add Task -->
+  <div class="add-task">
+    <input type="text" placeholder="Task Name" [(ngModel)]="newTaskName" />
+    <input type="text" placeholder="Section" [(ngModel)]="newTaskSection" />
+    <button (click)="addTask()">Add Task</button>
+  </div>
+
+  <!-- Task Cards -->
+  <div class="section-card" *ngFor="let sectionName of sections()">
+    <h3>{{ sectionName }} ({{ completedTasksCount(sectionName) }}/{{ totalTasksCount(sectionName) }})</h3>
+    <ul>
+      <li *ngFor="let task of getTasksBySection(sectionName)"
+          [class.selected]="selectedTask === task"
+          (click)="selectTask(task)">
+        <input type="checkbox" [checked]="task.completed" (change)="toggleTask(task)" />
+
+        <!-- Inline Edit -->
+        <span *ngIf="!task.editing">{{ task.name }}</span>
+        <input *ngIf="task.editing" type="text" [(ngModel)]="task.name" />
+
+        <!-- Buttons -->
+        <div class="task-buttons">
+          <button *ngIf="!task.editing && selectedTask === task" (click)="startEditing(task)">✏️</button>
+          <button *ngIf="task.editing" (click)="saveEdit(task, task.name)">💾</button>
+          <button *ngIf="task.editing" (click)="cancelEdit(task)">✖</button>
+          <button *ngIf="selectedTask === task" (click)="deleteTask(task)">🗑️</button>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <button class="save-btn" (click)="saveHistory()">Save Today’s Tasks</button>
+</div>

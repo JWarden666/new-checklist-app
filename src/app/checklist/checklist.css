@@ -1,0 +1,97 @@
+.checklist-container {
+  max-width: 700px;
+  margin: 20px auto;
+  padding: 15px;
+  background-color: #0033a0; /* Kroger blue */
+  color: #fff;
+  border-radius: 10px;
+  font-family: Arial, sans-serif;
+}
+
+h2, h3 { margin: 10px 0; }
+
+.add-task input {
+  margin-right: 5px;
+  padding: 4px;
+  border-radius: 4px;
+  border: none;
+}
+
+.add-task button {
+  background-color: #fff;
+  color: #0033a0;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.section-card {
+  background-color: #fff;
+  color: #000;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 10px 0;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.section-card:hover { transform: scale(1.02); }
+
+ul { list-style: none; padding: 0; }
+
+li {
+  padding: 5px;
+  margin: 3px 0;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background-color 0.3s ease;
+}
+
+li.selected { background-color: #e0e0e0; }
+
+input[type="checkbox"] { margin-right: 10px; }
+
+.task-buttons button {
+  margin-left: 3px;
+  padding: 2px 6px;
+  font-size: 0.9em;
+  background-color: #fff;
+  color: #0033a0;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.task-buttons button:hover { transform: scale(1.1); }
+
+.history-search, .history-box {
+  margin-bottom: 15px;
+}
+
+.history-box {
+  background-color: #fff;
+  color: #000;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.save-btn {
+  background-color: #fff;
+  color: #0033a0;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: transform 0.2s ease;
+}
+
+.save-btn:hover { transform: scale(1.05); }
+
+@media (max-width: 600px) {
+  .checklist-container { padding: 5px; }
+  .save-btn { width: 100%; }
+}
