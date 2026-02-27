@@ -10,7 +10,8 @@ export interface Task {
 }
 
 export interface TaskHistory {
-  date: string;
+  dateKey: string;
+  dateLabel: string;
   tasks: Task[];
   completionPercentage: number;
 }
@@ -23,12 +24,16 @@ export interface TaskHistory {
   styleUrls: ['./checklist.css']
 })
 export class ChecklistComponent implements OnInit {
-  currentDate: string = '';
+  currentDateKey: string = '';
+  currentDateLabel: string = '';
   searchDate: string = '';
   tasks: Task[] = [];
   selectedTask: Task | null = null;
   historyTasks: Task[] = [];
   historyCompletion: number = 0;
+  history: TaskHistory[] = [];
+  currentCompletionValue: number = 0;
+  historyDateLabel: string = '';
 
   newTaskName: string = '';
   newTaskSection: string = '';
@@ -100,14 +105,18 @@ export class ChecklistComponent implements OnInit {
 
   ngOnInit(): void {
     const today = new Date();
-    this.currentDate = today.toLocaleDateString();
+    this.currentDateKey = today.toISOString().split('T')[0];
+    this.currentDateLabel = today.toLocaleDateString();
     this.loadTodayTasks();
+    this.loadHistoryFromLocal();
+    this.updateCurrentCompletion();
   }
 
   // ------------------- Task Management -------------------
   toggleTask(task: Task) {
     task.completed = !task.completed;
     this.saveTasksToLocal();
+    this.updateCurrentCompletion();
   }
 
   selectTask(task: Task) {
@@ -120,6 +129,10 @@ export class ChecklistComponent implements OnInit {
 
   totalTasksCount(section: string): number {
     return this.getTasksBySection(section).length;
+  }
+
+  completedTasksTotal(): number {
+    return this.tasks.filter(t => t.completed).length;
   }
 
   getTasksBySection(section: string): Task[] {
@@ -141,6 +154,7 @@ export class ChecklistComponent implements OnInit {
     this.newTaskName = '';
     this.newTaskSection = '';
     this.saveTasksToLocal();
+    this.updateCurrentCompletion();
   }
 
   startEditing(task: Task) {
@@ -152,6 +166,7 @@ export class ChecklistComponent implements OnInit {
     task.name = newName.trim();
     task.editing = false;
     this.saveTasksToLocal();
+    this.updateCurrentCompletion();
   }
 
   cancelEdit(task: Task) {
@@ -163,47 +178,83 @@ export class ChecklistComponent implements OnInit {
     this.tasks = this.tasks.filter(t => t !== task);
     if (this.selectedTask === task) this.selectedTask = null;
     this.saveTasksToLocal();
+    this.updateCurrentCompletion();
   }
 
   // ------------------- History / Local Storage -------------------
   saveTasksToLocal() {
-    const key = `checklist-${this.currentDate}`;
+    const key = `checklist-${this.currentDateKey}`;
     localStorage.setItem(key, JSON.stringify(this.tasks));
   }
 
   loadTodayTasks() {
-    const key = `checklist-${this.currentDate}`;
+    const key = `checklist-${this.currentDateKey}`;
     const saved = localStorage.getItem(key);
     if (saved) this.tasks = JSON.parse(saved);
   }
 
   saveHistory() {
-    const completion = Math.round(
-      (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
-    );
+    const completion = this.calculateCompletion(this.tasks);
     const record: TaskHistory = {
-      date: this.currentDate,
+      dateKey: this.currentDateKey,
+      dateLabel: this.currentDateLabel,
       tasks: JSON.parse(JSON.stringify(this.tasks)),
       completionPercentage: completion
     };
-    fetch('http://localhost:3000/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(record)
-    })
-      .then(res => res.json())
-      .then(() => alert('History saved!'))
-      .catch(err => console.error(err));
+    const existingIndex = this.history.findIndex(entry => entry.dateKey === record.dateKey);
+    if (existingIndex >= 0) {
+      this.history[existingIndex] = record;
+    } else {
+      this.history.push(record);
+    }
+    this.history = this.sortHistory(this.history);
+    this.persistHistory();
+    alert('History saved!');
   }
 
   loadHistory() {
     if (!this.searchDate) return;
-    fetch(`http://localhost:3000/history/${this.searchDate}`)
-      .then(res => res.json())
-      .then((data: TaskHistory) => {
-        this.historyTasks = data.tasks;
-        this.historyCompletion = data.completionPercentage;
-      })
-      .catch(() => alert('No history found for this date'));
+    const match = this.history.find(entry => entry.dateKey === this.searchDate);
+    if (!match) {
+      alert('No history found for this date');
+      this.historyTasks = [];
+      this.historyCompletion = 0;
+      this.historyDateLabel = '';
+      return;
+    }
+    this.historyTasks = match.tasks;
+    this.historyCompletion = match.completionPercentage;
+    this.historyDateLabel = match.dateLabel;
+  }
+
+  private updateCurrentCompletion() {
+    this.currentCompletionValue = this.calculateCompletion(this.tasks);
+  }
+
+  private calculateCompletion(tasks: Task[]): number {
+    if (!tasks.length) return 0;
+    const completed = tasks.filter(t => t.completed).length;
+    return Math.round((completed / tasks.length) * 100);
+  }
+
+  private loadHistoryFromLocal() {
+    const stored = localStorage.getItem('checklist-history');
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as TaskHistory[];
+      if (Array.isArray(parsed)) {
+        this.history = this.sortHistory(parsed);
+      }
+    } catch {
+      this.history = [];
+    }
+  }
+
+  private persistHistory() {
+    localStorage.setItem('checklist-history', JSON.stringify(this.history));
+  }
+
+  private sortHistory(history: TaskHistory[]): TaskHistory[] {
+    return [...history].sort((a, b) => b.dateKey.localeCompare(a.dateKey));
   }
 }
