@@ -44,6 +44,17 @@ export class ChecklistComponent implements OnInit {
   newTaskName: string = '';
   newTaskSection: string = '';
 
+  get currentCompletionPercentage(): number {
+    if (this.tasks.length === 0) return 0;
+    return Math.round(
+      (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
+    );
+  }
+
+  get completedTasksTotal(): number {
+    return this.tasks.filter(t => t.completed).length;
+  }
+
   constructor() {
     // Initialize your tasks
     this.tasks = [
@@ -273,6 +284,13 @@ export class ChecklistComponent implements OnInit {
   }
 
   closeHistoryDetail() {
+    this.historyTasks = [];
+    this.historyCompletion = 0;
+    this.selectedHistoryDate = '';
+  }
+
+  closeHistoryView() {
+    this.showHistory = false;
     this.historyTasks = [];
     this.historyCompletion = 0;
     this.selectedHistoryDate = '';

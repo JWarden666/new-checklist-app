@@ -1,6 +1,23 @@
 <div class="checklist-container">
   <h2>Checklist - {{ currentDate }}</h2>
 
+  <!-- Today's Completion Bar -->
+  <div class="today-completion-bar">
+    <div class="today-completion-header">
+      <span class="today-completion-label">Today's Progress</span>
+      <span class="today-completion-pct">{{ currentCompletionPercentage }}%</span>
+    </div>
+    <div class="today-progress-track">
+      <div class="today-progress-fill" [style.width.%]="currentCompletionPercentage"
+           [class.progress-low]="currentCompletionPercentage < 33"
+           [class.progress-mid]="currentCompletionPercentage >= 33 && currentCompletionPercentage < 66"
+           [class.progress-high]="currentCompletionPercentage >= 66"></div>
+    </div>
+    <span class="today-completion-count">
+      {{ completedTasksTotal }} of {{ tasks.length }} tasks completed
+    </span>
+  </div>
+
   <!-- History Toggle Button -->
   <button class="history-toggle-btn" (click)="toggleHistoryView()">
     <span *ngIf="showHistory">Hide History</span>
@@ -9,7 +26,10 @@
 
   <!-- History Panel -->
   <div class="history-panel" *ngIf="showHistory">
-    <h3>Completion History</h3>
+    <div class="history-panel-header">
+      <h3>Completion History</h3>
+      <button class="close-history-btn" (click)="closeHistoryView()" title="Close history">&times;</button>
+    </div>
 
     <!-- Date Search within history panel -->
     <div class="history-search">
