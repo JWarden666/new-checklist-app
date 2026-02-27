@@ -1,6 +1,15 @@
 <div class="checklist-container">
   <h2>Checklist - {{ currentDate }}</h2>
 
+  <!-- Cloud Sync Status Indicator -->
+  <div class="sync-status" [ngClass]="'sync-' + syncStatus">
+    <span class="sync-dot"></span>
+    <span class="sync-label" *ngIf="syncStatus === 'synced'">Cloud synced</span>
+    <span class="sync-label" *ngIf="syncStatus === 'syncing'">Syncing...</span>
+    <span class="sync-label" *ngIf="syncStatus === 'offline'">Offline mode</span>
+    <span class="sync-label" *ngIf="syncStatus === 'error'">Sync error - retrying</span>
+  </div>
+
   <!-- Today's Completion Bar -->
   <div class="today-completion-bar">
     <div class="today-completion-header">
@@ -114,5 +123,5 @@
     </ul>
   </div>
 
-  <button class="save-btn" (click)="saveHistory()">Save Today’s Tasks</button>
+  <button class="save-btn" (click)="saveHistory()">Save Today's Tasks</button>
 </div>
