@@ -8,6 +8,9 @@
     <span class="sync-label" *ngIf="syncStatus === 'syncing'">Syncing...</span>
     <span class="sync-label" *ngIf="syncStatus === 'offline'">Offline mode</span>
     <span class="sync-label" *ngIf="syncStatus === 'error'">Sync error - retrying</span>
+    <button class="main-refresh-btn" (click)="refreshData()" [disabled]="isRefreshing" title="Refresh data from cloud">
+      <span class="refresh-icon" [class.spinning]="isRefreshing">&#x21bb;</span>
+    </button>
   </div>
 
   <!-- Today's Completion Bar -->
@@ -89,7 +92,7 @@
       </ul>
     </div>
 
-    <button class="refresh-btn" *ngIf="!historyLoading && !selectedHistoryDate" (click)="fetchHistoryList()">Refresh</button>
+    <button class="refresh-btn" *ngIf="!historyLoading && !selectedHistoryDate" (click)="refreshData()">Refresh</button>
   </div>
 
   <!-- Add Task -->
