@@ -29,7 +29,8 @@ export default async (req: Request, context: Context) => {
 
   if (req.method === 'POST') {
     const body = await req.json();
-    const { date, tasks } = body;
+    const { tasks } = body;
+    const date = context.params.date;
 
     if (!date || !tasks) {
       return Response.json({ error: 'Missing date or tasks' }, { status: 400 });

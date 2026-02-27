@@ -31,6 +31,7 @@ export interface HistorySummary {
 })
 export class ChecklistComponent implements OnInit, OnDestroy {
   currentDate: string = '';
+  dateKey: string = '';  // ISO format (YYYY-MM-DD) for consistent cross-device sync
   searchDate: string = '';
   tasks: Task[] = [];
   selectedTask: Task | null = null;
@@ -136,6 +137,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const today = new Date();
     this.currentDate = today.toLocaleDateString();
+    this.dateKey = today.toISOString().split('T')[0]; // e.g. "2026-02-27"
     this.loadFromCloud();
     this.startPolling();
 
@@ -165,7 +167,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   // ------------------- Cloud Sync -------------------
   private getDateKey(): string {
-    return encodeURIComponent(this.currentDate);
+    return this.dateKey;
   }
 
   async loadFromCloud(): Promise<void> {
@@ -180,7 +182,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
         this.cloudVersion = data.version;
       } else {
         // No cloud data yet — use defaults (or localStorage as migration)
-        const localKey = `checklist-${this.currentDate}`;
+        const localKey = `checklist-${this.dateKey}`;
         const saved = localStorage.getItem(localKey);
         if (saved) {
           this.tasks = JSON.parse(saved);
@@ -205,7 +207,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
     try {
       const payload = {
-        date: this.currentDate,
+        date: this.dateKey,
         tasks: this.tasks.map(t => ({
           section: t.section,
           name: t.name,
@@ -325,7 +327,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
     );
     const record: TaskHistory = {
-      date: this.currentDate,
+      date: this.dateKey,
       tasks: JSON.parse(JSON.stringify(this.tasks)),
       completionPercentage: completion
     };
@@ -396,12 +398,12 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   // ------------------- History / Local Storage -------------------
   saveTasksToLocal() {
-    const key = `checklist-${this.currentDate}`;
+    const key = `checklist-${this.dateKey}`;
     localStorage.setItem(key, JSON.stringify(this.tasks));
   }
 
   private loadTodayTasksLocal() {
-    const key = `checklist-${this.currentDate}`;
+    const key = `checklist-${this.dateKey}`;
     const saved = localStorage.getItem(key);
     if (saved) this.tasks = JSON.parse(saved);
   }
@@ -411,7 +413,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
     );
     const record: TaskHistory = {
-      date: this.currentDate,
+      date: this.dateKey,
       tasks: JSON.parse(JSON.stringify(this.tasks)),
       completionPercentage: completion
     };
