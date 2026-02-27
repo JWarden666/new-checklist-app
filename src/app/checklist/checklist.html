@@ -98,10 +98,7 @@
   <!-- Add Task -->
   <div class="add-task">
     <input type="text" placeholder="Task Name" [(ngModel)]="newTaskName" />
-    <select [(ngModel)]="newTaskSection">
-      <option value="" disabled>Select Section</option>
-      <option *ngFor="let sectionName of sections()" [value]="sectionName">{{ sectionName }}</option>
-    </select>
+    <input type="text" placeholder="Section" [(ngModel)]="newTaskSection" />
     <button (click)="addTask()">Add Task</button>
   </div>
 

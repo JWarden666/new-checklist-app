@@ -251,24 +251,17 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     if (this.isSaving) return;
 
     try {
-      // Use lightweight HEAD request to check version first
-      const headRes = await fetch(`/api/checklist/${this.getDateKey()}`, { method: 'HEAD' });
-      if (!headRes.ok) return;
+      const res = await fetch(`/api/checklist/${this.getDateKey()}`);
+      if (!res.ok) return;
 
-      const remoteVersion = parseInt(headRes.headers.get('X-Version') || '0', 10);
-      if (remoteVersion > this.cloudVersion) {
-        // Newer version available — fetch full data
-        const res = await fetch(`/api/checklist/${this.getDateKey()}`);
-        if (!res.ok) return;
-
-        const data = await res.json();
-        if (data.exists && data.version > this.cloudVersion) {
-          this.cloudVersion = data.version;
-          this.tasks = data.tasks;
-          this.saveTasksToLocal();
-          this.syncStatus = 'synced';
-          this.cdr.markForCheck();
-        }
+      const data = await res.json();
+      if (data.exists && data.version > this.cloudVersion) {
+        // Newer version available — update local state
+        this.cloudVersion = data.version;
+        this.tasks = data.tasks;
+        this.saveTasksToLocal();
+        this.syncStatus = 'synced';
+        this.cdr.markForCheck();
       }
     } catch {
       // Silent fail on poll — will retry next interval

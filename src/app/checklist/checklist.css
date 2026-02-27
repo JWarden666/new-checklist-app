@@ -173,19 +173,11 @@ h2, h3 { margin: 10px 0; }
   color: #666;
 }
 
-.add-task input,
-.add-task select {
+.add-task input {
   margin-right: 5px;
   padding: 4px;
   border-radius: 4px;
   border: none;
-  font-size: 0.95em;
-}
-
-.add-task select {
-  background-color: #fff;
-  color: #333;
-  cursor: pointer;
 }
 
 .add-task button {
