@@ -56,28 +56,10 @@ export default async (req: Request, context: Context) => {
     });
   }
 
-  // HEAD request for quick version check (lightweight polling)
-  if (req.method === 'HEAD') {
-    if (!dateParam) {
-      return new Response(null, { status: 400 });
-    }
-
-    const record = await store.get(dateParam, { type: 'json' }) as any;
-    const version = record?.version || 0;
-
-    return new Response(null, {
-      status: 200,
-      headers: {
-        'X-Version': String(version),
-        'X-Last-Updated': record?.lastUpdated || '',
-      },
-    });
-  }
-
   return Response.json({ error: 'Method not allowed' }, { status: 405 });
 };
 
 export const config: Config = {
   path: ['/api/checklist/:date'],
-  method: ['GET', 'POST', 'HEAD'],
+  method: ['GET', 'POST'],
 };
