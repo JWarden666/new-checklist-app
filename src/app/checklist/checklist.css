@@ -10,6 +10,70 @@
 
 h2, h3 { margin: 10px 0; }
 
+.today-progress {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.progress-percent {
+  font-size: 1.3em;
+  font-weight: bold;
+}
+
+.progress-bar {
+  height: 12px;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 8px 0 6px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffcc00, #8fd14f);
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+.progress-meta {
+  margin: 0;
+  font-size: 0.9em;
+  opacity: 0.9;
+}
+
+.history-summary {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 15px;
+}
+
+.history-summary ul {
+  margin: 0;
+}
+
+.history-summary li {
+  cursor: default;
+  padding: 6px 0;
+}
+
+.history-date {
+  font-weight: 600;
+}
+
+.history-percent {
+  font-weight: 700;
+}
+
 .add-task input {
   margin-right: 5px;
   padding: 4px;

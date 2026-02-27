@@ -1,5 +1,24 @@
 <div class="checklist-container">
-  <h2>Checklist - {{ currentDate }}</h2>
+  <div class="today-progress">
+    <div class="progress-header">
+      <h2>Checklist - {{ currentDateLabel }}</h2>
+      <span class="progress-percent">{{ currentCompletionValue }}%</span>
+    </div>
+    <div class="progress-bar" role="progressbar" [attr.aria-valuenow]="currentCompletionValue" aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-fill" [style.width.%]="currentCompletionValue"></div>
+    </div>
+    <p class="progress-meta">{{ completedTasksTotal() }}/{{ tasks.length }} tasks completed today</p>
+  </div>
+
+  <div class="history-summary" *ngIf="history.length">
+    <h3>Completion History</h3>
+    <ul>
+      <li *ngFor="let entry of history">
+        <span class="history-date">{{ entry.dateLabel }}</span>
+        <span class="history-percent">{{ entry.completionPercentage }}%</span>
+      </li>
+    </ul>
+  </div>
 
   <!-- History Search -->
   <div class="history-search">
@@ -10,7 +29,7 @@
 
   <!-- History Display -->
   <div class="history-box" *ngIf="historyTasks.length">
-    <h3>History for {{ searchDate }}</h3>
+    <h3>History for {{ historyDateLabel || searchDate }}</h3>
     <p>Completion: {{ historyCompletion }}%</p>
     <ul>
       <li *ngFor="let task of historyTasks">
