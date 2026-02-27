@@ -47,9 +47,12 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   // Cloud sync state
   syncStatus: 'synced' | 'syncing' | 'offline' | 'error' = 'synced';
   cloudVersion: number = 0;
+  isRefreshing: boolean = false;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private isSaving: boolean = false;
+  private boundVisibilityHandler = this.onVisibilityChange.bind(this);
+  private boundFocusHandler = this.onWindowFocus.bind(this);
 
   get currentCompletionPercentage(): number {
     if (this.tasks.length === 0) return 0;
@@ -135,6 +138,10 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     this.currentDate = today.toLocaleDateString();
     this.loadFromCloud();
     this.startPolling();
+
+    // Listen for visibility and focus changes to sync across devices
+    document.addEventListener('visibilitychange', this.boundVisibilityHandler);
+    window.addEventListener('focus', this.boundFocusHandler);
   }
 
   ngOnDestroy(): void {
@@ -142,6 +149,18 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
     }
+    document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
+    window.removeEventListener('focus', this.boundFocusHandler);
+  }
+
+  private onVisibilityChange(): void {
+    if (document.visibilityState === 'visible') {
+      this.refreshData();
+    }
+  }
+
+  private onWindowFocus(): void {
+    this.refreshData();
   }
 
   // ------------------- Cloud Sync -------------------
@@ -229,19 +248,56 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     if (this.isSaving) return;
 
     try {
-      const res = await fetch(`/api/checklist/${this.getDateKey()}`);
-      if (!res.ok) return;
+      // Use lightweight HEAD request to check version first
+      const headRes = await fetch(`/api/checklist/${this.getDateKey()}`, { method: 'HEAD' });
+      if (!headRes.ok) return;
 
-      const data = await res.json();
-      if (data.exists && data.version > this.cloudVersion) {
-        // Newer version available — update local state
-        this.cloudVersion = data.version;
-        this.tasks = data.tasks;
-        this.saveTasksToLocal();
-        this.syncStatus = 'synced';
+      const remoteVersion = parseInt(headRes.headers.get('X-Version') || '0', 10);
+      if (remoteVersion > this.cloudVersion) {
+        // Newer version available — fetch full data
+        const res = await fetch(`/api/checklist/${this.getDateKey()}`);
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (data.exists && data.version > this.cloudVersion) {
+          this.cloudVersion = data.version;
+          this.tasks = data.tasks;
+          this.saveTasksToLocal();
+          this.syncStatus = 'synced';
+        }
       }
     } catch {
       // Silent fail on poll — will retry next interval
+    }
+  }
+
+  /** Full refresh of today's tasks from cloud — called by refresh button and visibility events */
+  async refreshData(): Promise<void> {
+    if (this.isSaving) return;
+    this.isRefreshing = true;
+    this.syncStatus = 'syncing';
+
+    try {
+      const res = await fetch(`/api/checklist/${this.getDateKey()}`);
+      if (!res.ok) throw new Error('Failed to refresh');
+
+      const data = await res.json();
+      if (data.exists && data.tasks && data.tasks.length > 0) {
+        this.cloudVersion = data.version;
+        this.tasks = data.tasks;
+        this.saveTasksToLocal();
+      }
+      this.syncStatus = 'synced';
+    } catch (err) {
+      console.error('Refresh failed:', err);
+      this.syncStatus = 'error';
+    } finally {
+      this.isRefreshing = false;
+    }
+
+    // Also refresh history list if the panel is open
+    if (this.showHistory) {
+      this.fetchHistoryList();
     }
   }
 
