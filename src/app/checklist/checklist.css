@@ -10,6 +10,65 @@
 
 h2, h3 { margin: 10px 0; }
 
+/* Today's Completion Bar */
+.today-completion-bar {
+  background-color: #fff;
+  color: #000;
+  border-radius: 8px;
+  padding: 12px 15px;
+  margin-bottom: 12px;
+}
+
+.today-completion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.today-completion-label {
+  font-weight: bold;
+  color: #0033a0;
+  font-size: 1em;
+}
+
+.today-completion-pct {
+  font-weight: bold;
+  font-size: 1.4em;
+  color: #0033a0;
+}
+
+.today-progress-track {
+  height: 16px;
+  background-color: #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.today-progress-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.4s ease;
+}
+
+.today-progress-fill.progress-low {
+  background-color: #e53935;
+}
+
+.today-progress-fill.progress-mid {
+  background-color: #fb8c00;
+}
+
+.today-progress-fill.progress-high {
+  background-color: #43a047;
+}
+
+.today-completion-count {
+  font-size: 0.85em;
+  color: #666;
+}
+
 .add-task input {
   margin-right: 5px;
   padding: 4px;
@@ -106,9 +165,30 @@ input[type="checkbox"] { margin-right: 10px; }
   margin-bottom: 15px;
 }
 
+.history-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .history-panel h3 {
   color: #0033a0;
   margin-top: 0;
+}
+
+.close-history-btn {
+  background: none;
+  border: none;
+  font-size: 1.6em;
+  color: #666;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.close-history-btn:hover {
+  color: #c62828;
 }
 
 .history-loading, .history-empty {
