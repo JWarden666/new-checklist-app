@@ -1,22 +1,66 @@
 <div class="checklist-container">
   <h2>Checklist - {{ currentDate }}</h2>
 
-  <!-- History Search -->
-  <div class="history-search">
-    <label for="historyDate">Search History:</label>
-    <input type="date" [(ngModel)]="searchDate" id="historyDate" />
-    <button (click)="loadHistory()">Search</button>
-  </div>
+  <!-- History Toggle Button -->
+  <button class="history-toggle-btn" (click)="toggleHistoryView()">
+    <span *ngIf="showHistory">Hide History</span>
+    <span *ngIf="!showHistory">View History</span>
+  </button>
 
-  <!-- History Display -->
-  <div class="history-box" *ngIf="historyTasks.length">
-    <h3>History for {{ searchDate }}</h3>
-    <p>Completion: {{ historyCompletion }}%</p>
-    <ul>
-      <li *ngFor="let task of historyTasks">
-        {{ task.name }} - {{ task.completed ? '✅' : '❌' }}
-      </li>
-    </ul>
+  <!-- History Panel -->
+  <div class="history-panel" *ngIf="showHistory">
+    <h3>Completion History</h3>
+
+    <!-- Date Search within history panel -->
+    <div class="history-search">
+      <label for="historyDate">Search by Date:</label>
+      <input type="date" [(ngModel)]="searchDate" id="historyDate" />
+      <button (click)="loadHistory()">Search</button>
+    </div>
+
+    <!-- Loading state -->
+    <p *ngIf="historyLoading" class="history-loading">Loading history...</p>
+
+    <!-- No history message -->
+    <p *ngIf="!historyLoading && historyList.length === 0 && !selectedHistoryDate" class="history-empty">
+      No history saved yet. Complete tasks and save to start tracking.
+    </p>
+
+    <!-- History List -->
+    <div class="history-list" *ngIf="!historyLoading && historyList.length > 0 && !selectedHistoryDate">
+      <div class="history-entry" *ngFor="let entry of historyList" (click)="viewHistoryEntry(entry.date)">
+        <div class="history-entry-date">{{ entry.date }}</div>
+        <div class="history-entry-stats">
+          <div class="history-progress-bar">
+            <div class="history-progress-fill" [style.width.%]="entry.completionPercentage"></div>
+          </div>
+          <span class="history-entry-pct">{{ entry.completionPercentage }}%</span>
+          <span class="history-entry-count">{{ entry.completedCount }}/{{ entry.taskCount }} tasks</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- History Detail View -->
+    <div class="history-detail" *ngIf="selectedHistoryDate">
+      <div class="history-detail-header">
+        <button class="back-btn" (click)="closeHistoryDetail()">Back to List</button>
+        <h4>{{ selectedHistoryDate }}</h4>
+        <p>Completion: {{ historyCompletion }}%</p>
+      </div>
+      <div class="history-progress-bar large">
+        <div class="history-progress-fill" [style.width.%]="historyCompletion"></div>
+      </div>
+      <ul class="history-task-list">
+        <li *ngFor="let task of historyTasks" [class.task-done]="task.completed">
+          <span class="task-status" *ngIf="task.completed">&#10003;</span>
+          <span class="task-status" *ngIf="!task.completed">&#10007;</span>
+          <span class="task-section-label">{{ task.section }}</span>
+          <span>{{ task.name }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <button class="refresh-btn" *ngIf="!historyLoading && !selectedHistoryDate" (click)="fetchHistoryList()">Refresh</button>
   </div>
 
   <!-- Add Task -->
@@ -41,10 +85,10 @@
 
         <!-- Buttons -->
         <div class="task-buttons">
-          <button *ngIf="!task.editing && selectedTask === task" (click)="startEditing(task)">✏️</button>
-          <button *ngIf="task.editing" (click)="saveEdit(task, task.name)">💾</button>
-          <button *ngIf="task.editing" (click)="cancelEdit(task)">✖</button>
-          <button *ngIf="selectedTask === task" (click)="deleteTask(task)">🗑️</button>
+          <button *ngIf="!task.editing && selectedTask === task" (click)="startEditing(task)">Edit</button>
+          <button *ngIf="task.editing" (click)="saveEdit(task, task.name)">Save</button>
+          <button *ngIf="task.editing" (click)="cancelEdit(task)">Cancel</button>
+          <button *ngIf="selectedTask === task" (click)="deleteTask(task)">Delete</button>
         </div>
       </li>
     </ul>

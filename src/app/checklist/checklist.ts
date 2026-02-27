@@ -15,6 +15,13 @@ export interface TaskHistory {
   completionPercentage: number;
 }
 
+export interface HistorySummary {
+  date: string;
+  completionPercentage: number;
+  taskCount: number;
+  completedCount: number;
+}
+
 @Component({
   selector: 'app-checklist',
   standalone: true,
@@ -29,6 +36,10 @@ export class ChecklistComponent implements OnInit {
   selectedTask: Task | null = null;
   historyTasks: Task[] = [];
   historyCompletion: number = 0;
+  showHistory: boolean = false;
+  historyList: HistorySummary[] = [];
+  historyLoading: boolean = false;
+  selectedHistoryDate: string = '';
 
   newTaskName: string = '';
   newTaskSection: string = '';
@@ -108,6 +119,23 @@ export class ChecklistComponent implements OnInit {
   toggleTask(task: Task) {
     task.completed = !task.completed;
     this.saveTasksToLocal();
+    this.saveCompletionPercentage();
+  }
+
+  saveCompletionPercentage() {
+    const completion = Math.round(
+      (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
+    );
+    const record: TaskHistory = {
+      date: this.currentDate,
+      tasks: JSON.parse(JSON.stringify(this.tasks)),
+      completionPercentage: completion
+    };
+    fetch('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record)
+    }).catch(err => console.error('Failed to save completion percentage:', err));
   }
 
   selectTask(task: Task) {
@@ -186,7 +214,7 @@ export class ChecklistComponent implements OnInit {
       tasks: JSON.parse(JSON.stringify(this.tasks)),
       completionPercentage: completion
     };
-    fetch('http://localhost:3000/history', {
+    fetch('/api/history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record)
@@ -198,12 +226,55 @@ export class ChecklistComponent implements OnInit {
 
   loadHistory() {
     if (!this.searchDate) return;
-    fetch(`http://localhost:3000/history/${this.searchDate}`)
-      .then(res => res.json())
+    this.loadHistoryForDate(this.searchDate);
+  }
+
+  toggleHistoryView() {
+    this.showHistory = !this.showHistory;
+    if (this.showHistory && this.historyList.length === 0) {
+      this.fetchHistoryList();
+    }
+  }
+
+  fetchHistoryList() {
+    this.historyLoading = true;
+    fetch('/api/history')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load history');
+        return res.json();
+      })
+      .then((data: HistorySummary[]) => {
+        this.historyList = data;
+        this.historyLoading = false;
+      })
+      .catch(err => {
+        console.error('Failed to load history list:', err);
+        this.historyLoading = false;
+      });
+  }
+
+  viewHistoryEntry(date: string) {
+    this.selectedHistoryDate = date;
+    this.loadHistoryForDate(date);
+  }
+
+  private loadHistoryForDate(date: string) {
+    fetch(`/api/history/${date}`)
+      .then(res => {
+        if (!res.ok) throw new Error('Not found');
+        return res.json();
+      })
       .then((data: TaskHistory) => {
         this.historyTasks = data.tasks;
         this.historyCompletion = data.completionPercentage;
+        this.selectedHistoryDate = date;
       })
       .catch(() => alert('No history found for this date'));
+  }
+
+  closeHistoryDetail() {
+    this.historyTasks = [];
+    this.historyCompletion = 0;
+    this.selectedHistoryDate = '';
   }
 }
