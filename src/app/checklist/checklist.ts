@@ -55,6 +55,33 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   private boundVisibilityHandler = this.onVisibilityChange.bind(this);
   private boundFocusHandler = this.onWindowFocus.bind(this);
 
+  // Pacific time zone for consistent day boundaries
+  private static readonly PACIFIC_TZ = 'America/Los_Angeles';
+
+  /** Returns the current date key (YYYY-MM-DD) in Pacific time */
+  private getPacificDateKey(): string {
+    const now = new Date();
+    // Format in Pacific time to get the correct calendar date
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: ChecklistComponent.PACIFIC_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now); // en-CA gives YYYY-MM-DD format
+    return parts;
+  }
+
+  /** Returns a user-friendly display date in Pacific time */
+  private getPacificDisplayDate(): string {
+    const now = new Date();
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: ChecklistComponent.PACIFIC_TZ,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    }).format(now);
+  }
+
   get currentCompletionPercentage(): number {
     if (this.tasks.length === 0) return 0;
     return Math.round(
@@ -135,9 +162,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    const today = new Date();
-    this.currentDate = today.toLocaleDateString();
-    this.dateKey = today.toISOString().split('T')[0]; // e.g. "2026-02-27"
+    this.currentDate = this.getPacificDisplayDate();
+    this.dateKey = this.getPacificDateKey();
     this.loadFromCloud();
     this.startPolling();
 
@@ -252,6 +278,13 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   private async pollForChanges(): Promise<void> {
     if (this.isSaving) return;
 
+    // Check if the day has changed in Pacific time (midnight PST/PDT rollover)
+    const currentPacificDate = this.getPacificDateKey();
+    if (currentPacificDate !== this.dateKey) {
+      await this.handleNewDay(currentPacificDate);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/checklist/${this.getDateKey()}`);
       if (!res.ok) return;
@@ -270,9 +303,49 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Handle the transition to a new day at midnight Pacific time */
+  private async handleNewDay(newDateKey: string): Promise<void> {
+    // Save history for the previous day before resetting
+    try {
+      const completion = Math.round(
+        (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
+      );
+      const record: TaskHistory = {
+        date: this.dateKey,
+        tasks: JSON.parse(JSON.stringify(this.tasks)),
+        completionPercentage: completion,
+      };
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      });
+    } catch (err) {
+      console.error('Failed to auto-save history on day change:', err);
+    }
+
+    // Switch to the new day
+    this.dateKey = newDateKey;
+    this.currentDate = this.getPacificDisplayDate();
+    this.cloudVersion = 0;
+    this.tasks = this.getDefaultTasks();
+
+    // Load new day's data from cloud (in case another device already created it)
+    await this.loadFromCloud();
+    this.cdr.markForCheck();
+  }
+
   /** Full refresh of today's tasks from cloud — called by refresh button and visibility events */
   async refreshData(): Promise<void> {
     if (this.isSaving) return;
+
+    // Check if the day has changed in Pacific time
+    const currentPacificDate = this.getPacificDateKey();
+    if (currentPacificDate !== this.dateKey) {
+      await this.handleNewDay(currentPacificDate);
+      return;
+    }
+
     this.isRefreshing = true;
     this.syncStatus = 'syncing';
 
