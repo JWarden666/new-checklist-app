@@ -6,7 +6,14 @@ export interface Task {
   section: string;
   name: string;
   completed: boolean;
+  parent?: string; // name of the department this item sits under (same section)
+  checks?: TaskCheck[]; // extra checkboxes, e.g. temperature windows
   editing?: boolean; // for inline editing
+}
+
+export interface TaskCheck {
+  label: string;
+  completed: boolean;
 }
 
 export interface TaskHistory {
@@ -143,8 +150,21 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Daily Processes', name: 'Equipment Inspections - Meat Saw', completed: false },
     { section: 'Daily Processes', name: 'Equipment Inspections - Grinder', completed: false },
     { section: 'Fresh Production', name: 'Bakery', completed: false },
+    { section: 'Fresh Production', parent: 'Bakery', name: 'Prep for Today', completed: false },
+    { section: 'Fresh Production', parent: 'Bakery', name: 'Prep for Tomorrow', completed: false },
+    { section: 'Fresh Production', parent: 'Bakery', name: 'Thaw and Sell', completed: false },
+    { section: 'Fresh Production', parent: 'Bakery', name: 'Cookies', completed: false },
     { section: 'Fresh Production', name: 'Deli', completed: false },
+    { section: 'Fresh Production', parent: 'Deli', name: 'FSGNG', completed: false },
+    { section: 'Fresh Production', parent: 'Deli', name: 'Hot Production', completed: false,
+      checks: this.makeChecks(['12pm', '2pm', '4pm', '6pm']) },
+    { section: 'Fresh Production', parent: 'Deli', name: 'Cold Production', completed: false },
+    { section: 'Fresh Production', parent: 'Deli', name: 'Thaw and Sell', completed: false },
     { section: 'Fresh Production', name: 'Meat', completed: false },
+    { section: 'Fresh Production', parent: 'Meat', name: 'Production', completed: false },
+    { section: 'Fresh Production', parent: 'Meat', name: 'Meat Thaw and Sell', completed: false },
+    { section: 'Fresh Production', parent: 'Meat', name: 'Seafood Thaw and Sell', completed: false,
+      checks: this.makeChecks(['12pm', '4pm']) },
     { section: 'Fresh Production', name: 'Starbucks', completed: false },
     { section: 'Fresh Production', name: 'Murrays', completed: false },
     { section: 'Directed Replenishment', name: 'HABA', completed: false },
@@ -155,6 +175,43 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Observations', name: 'Product Date Management', completed: false },
     { section: 'Observations', name: 'Top Stock', completed: false },
     ];
+  }
+
+  private makeChecks(labels: string[]): TaskCheck[] {
+    return labels.map(label => ({ label, completed: false }));
+  }
+
+  /**
+   * Adds any default sub-items (and their extra checkboxes) that are missing from
+   * an existing day's tasks, so days saved before they existed still show them.
+   * Returns true if anything was added.
+   */
+  private mergeDefaultSubItems(tasks: Task[]): boolean {
+    let changed = false;
+    for (const def of this.getDefaultTasks()) {
+      if (!def.parent) continue;
+      const existing = tasks.find(t =>
+        t.section === def.section && t.parent === def.parent && t.name === def.name);
+      if (existing) {
+        if (def.checks && !existing.checks) {
+          existing.checks = def.checks;
+          changed = true;
+        }
+        continue;
+      }
+      // Insert after the parent's last existing sub-item (or after the parent itself)
+      let insertAt = -1;
+      tasks.forEach((t, i) => {
+        if (t.section === def.section && (t.name === def.parent && !t.parent || t.parent === def.parent)) {
+          insertAt = i;
+        }
+      });
+      if (insertAt === -1) continue; // department was removed — don't resurrect its items
+      tasks.splice(insertAt + 1, 0, { ...def });
+      changed = true;
+    }
+    if (changed) this.syncParents(tasks);
+    return changed;
   }
 
   constructor(private cdr: ChangeDetectorRef) {
@@ -206,12 +263,16 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       if (data.exists && data.tasks && data.tasks.length > 0) {
         this.tasks = data.tasks;
         this.cloudVersion = data.version;
+        if (this.mergeDefaultSubItems(this.tasks)) {
+          await this.saveToCloud();
+        }
       } else {
         // No cloud data yet — use defaults (or localStorage as migration)
         const localKey = `checklist-${this.dateKey}`;
         const saved = localStorage.getItem(localKey);
         if (saved) {
           this.tasks = JSON.parse(saved);
+          this.mergeDefaultSubItems(this.tasks);
         }
         // Push initial state to cloud
         await this.saveToCloud();
@@ -238,6 +299,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
           section: t.section,
           name: t.name,
           completed: t.completed,
+          ...(t.parent ? { parent: t.parent } : {}),
+          ...(t.checks ? { checks: t.checks.map(c => ({ label: c.label, completed: c.completed })) } : {}),
         })),
       };
 
@@ -390,9 +453,57 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   // ------------------- Task Management -------------------
   toggleTask(task: Task) {
+    // Departments with sub-items check themselves automatically
+    if (this.hasChildren(task)) return;
     task.completed = !task.completed;
+    this.syncParents(this.tasks);
     this.saveTasksToLocal();
     this.debouncedSaveToCloud();
+  }
+
+  toggleCheck(check: TaskCheck) {
+    check.completed = !check.completed;
+    this.saveTasksToLocal();
+    this.debouncedSaveToCloud();
+  }
+
+  isParentOf(parent: Task, child: Task): boolean {
+    return !parent.parent && child.parent === parent.name && child.section === parent.section;
+  }
+
+  getChildTasks(parent: Task): Task[] {
+    return this.tasks.filter(t => this.isParentOf(parent, t));
+  }
+
+  hasChildren(task: Task): boolean {
+    return this.tasks.some(t => this.isParentOf(task, t));
+  }
+
+  /** Marks each department complete when all of its sub-items are complete */
+  private syncParents(tasks: Task[]): void {
+    for (const parent of tasks) {
+      if (parent.parent) continue;
+      const children = tasks.filter(t =>
+        t.parent === parent.name && t.section === parent.section);
+      if (children.length > 0) {
+        parent.completed = children.every(c => c.completed);
+      }
+    }
+  }
+
+  /** Tasks for a section in display order: each top-level item followed by its sub-items */
+  getDisplayTasks(section: string): Task[] {
+    const sectionTasks = this.getTasksBySection(section);
+    const topLevel = sectionTasks.filter(t =>
+      !t.parent || !sectionTasks.some(p => this.isParentOf(p, t)));
+    const ordered: Task[] = [];
+    for (const task of topLevel) {
+      ordered.push(task);
+      if (!task.parent) {
+        ordered.push(...sectionTasks.filter(t => this.isParentOf(task, t)));
+      }
+    }
+    return ordered;
   }
 
   saveCompletionPercentage() {
@@ -445,12 +556,23 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     this.debouncedSaveToCloud();
   }
 
+  private originalNames = new Map<Task, string>();
+
   startEditing(task: Task) {
+    this.originalNames.set(task, task.name);
     task.editing = true;
   }
 
   saveEdit(task: Task, newName: string) {
     if (!newName.trim()) return;
+    const oldName = this.originalNames.get(task) ?? task.name;
+    // Keep sub-items attached when a department is renamed
+    if (!task.parent) {
+      this.tasks
+        .filter(t => t !== task && t.parent === oldName && t.section === task.section)
+        .forEach(t => (t.parent = newName.trim()));
+    }
+    this.originalNames.delete(task);
     task.name = newName.trim();
     task.editing = false;
     this.saveTasksToLocal();
@@ -458,13 +580,18 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   cancelEdit(task: Task) {
+    const oldName = this.originalNames.get(task);
+    if (oldName !== undefined) task.name = oldName;
+    this.originalNames.delete(task);
     task.editing = false;
   }
 
   deleteTask(task: Task) {
     if (!confirm('Are you sure you want to delete this task?')) return;
-    this.tasks = this.tasks.filter(t => t !== task);
+    const children = this.getChildTasks(task);
+    this.tasks = this.tasks.filter(t => t !== task && !children.includes(t));
     if (this.selectedTask === task) this.selectedTask = null;
+    this.syncParents(this.tasks);
     this.saveTasksToLocal();
     this.debouncedSaveToCloud();
   }
@@ -478,7 +605,10 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   private loadTodayTasksLocal() {
     const key = `checklist-${this.dateKey}`;
     const saved = localStorage.getItem(key);
-    if (saved) this.tasks = JSON.parse(saved);
+    if (saved) {
+      this.tasks = JSON.parse(saved);
+      this.mergeDefaultSubItems(this.tasks);
+    }
   }
 
   saveHistory() {
