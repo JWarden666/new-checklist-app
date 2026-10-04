@@ -3,6 +3,22 @@ import type { Config, Context } from '@netlify/functions';
 
 const STORE_NAME = 'checklist-history';
 
+// Items with multiple checkboxes (e.g. Backroom / Daily Counts) count each checkbox separately
+function countUnits(tasks: any[] | undefined): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  for (const t of tasks || []) {
+    if (Array.isArray(t.checks) && t.checks.length > 0) {
+      total += t.checks.length;
+      done += t.checks.filter((c: any) => c.completed).length;
+    } else {
+      total += 1;
+      if (t.completed) done += 1;
+    }
+  }
+  return { done, total };
+}
+
 export default async (req: Request, context: Context) => {
   const store = getStore({ name: STORE_NAME, consistency: 'strong' });
   const url = new URL(req.url);
@@ -38,8 +54,8 @@ export default async (req: Request, context: Context) => {
           entries.push({
             date: record.date,
             completionPercentage: record.completionPercentage,
-            taskCount: record.tasks ? record.tasks.length : 0,
-            completedCount: record.tasks ? record.tasks.filter((t: any) => t.completed).length : 0,
+            taskCount: countUnits(record.tasks).total,
+            completedCount: countUnits(record.tasks).done,
           });
         }
       }

@@ -2,11 +2,16 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
+export interface TaskCheck {
+  label: string;
+  completed: boolean;
+}
+
 export interface Task {
   section: string;
   name: string;
   completed: boolean;
-  editing?: boolean; // for inline editing
+  checks?: TaskCheck[]; // multiple checkboxes per item (e.g. Backroom / Daily Counts)
 }
 
 export interface TaskHistory {
@@ -44,6 +49,14 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   newTaskName: string = '';
   newTaskSection: string = '';
+  newSectionName: string = '';
+  readonly NEW_SECTION = '__new__';
+
+  // Inline editing state
+  editingTask: Task | null = null;
+  editDraft: string = '';
+  editingSection: string | null = null;
+  sectionDraft: string = '';
 
   // Cloud sync state
   syncStatus: 'synced' | 'syncing' | 'offline' | 'error' = 'synced';
@@ -82,26 +95,41 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     }).format(now);
   }
 
+  /** Counts checkboxes: plain items count once, multi-check items count each checkbox */
+  private countUnits(tasks: Task[]): { done: number; total: number } {
+    let done = 0;
+    let total = 0;
+    for (const t of tasks) {
+      if (t.checks?.length) {
+        total += t.checks.length;
+        done += t.checks.filter(c => c.completed).length;
+      } else {
+        total += 1;
+        if (t.completed) done += 1;
+      }
+    }
+    return { done, total };
+  }
+
+  private completionFor(tasks: Task[]): number {
+    const { done, total } = this.countUnits(tasks);
+    return total === 0 ? 0 : Math.round((done / total) * 100);
+  }
+
   get currentCompletionPercentage(): number {
-    if (this.tasks.length === 0) return 0;
-    return Math.round(
-      (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
-    );
+    return this.completionFor(this.tasks);
   }
 
   get completedTasksTotal(): number {
-    return this.tasks.filter(t => t.completed).length;
+    return this.countUnits(this.tasks).done;
+  }
+
+  get totalTasksUnits(): number {
+    return this.countUnits(this.tasks).total;
   }
 
   private getDefaultTasks(): Task[] {
     return [
-    { section: 'Period', name: 'Adult Bev Display Compliance First Wednesday of the Period', completed: false },
-    { section: 'Daily To Do', name: 'Emergency Exit Survey', completed: false },
-    { section: 'Daily To Do', name: 'Wall To Wall - Bakery', completed: false },
-    { section: 'Daily To Do', name: 'Wall To Wall - Grocery', completed: false },
-    { section: 'Go Spot Check', name: 'Morning (11am-2pm)', completed: false },
-    { section: 'Go Spot Check', name: 'Afternoon (2pm-5pm)', completed: false },
-    { section: 'Go Spot Check', name: 'Evening (5pm-8pm)', completed: false },
     { section: 'Store Leader Walk', name: 'Grocery Store Leader', completed: false },
     { section: 'Store Leader Walk', name: 'Drug/Gm Store Leader', completed: false },
     { section: 'Store Leader Walk', name: 'Pick Up Store Leader', completed: false },
@@ -128,33 +156,103 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Closing MOD Duties', name: 'Getting a Good Close GSC', completed: false },
     { section: 'Closing MOD Duties', name: 'Trash', completed: false },
     { section: 'Closing MOD Duties', name: 'Sign Getting a Good Close', completed: false },
-    { section: 'Weekly', name: 'Sustainment Check on Monday', completed: false },
-    { section: 'Weekly', name: 'Quick Post Schedule on Thursday', completed: false },
-    { section: 'Weekly', name: 'Center Store / HABA Merchandise Plan GSC on Wednesday', completed: false },
-    { section: 'Weekly', name: 'Monday Wall 2 Wall', completed: false },
-    { section: 'Weekly', name: 'FSSR Go Spot Check', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Balers', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Battery PIT (AM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Battery PIT (PM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Propane PIT (AM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Propane PIT (PM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Oven', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Slicers', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Meat Saw', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Grinder', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Balers', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Battery PIT (AM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Battery PIT (PM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Propane PIT (AM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Propane PIT (PM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Oven', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Slicers', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Meat Saw', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Grinder', completed: false },
     { section: 'Fresh Production', name: 'Bakery', completed: false },
     { section: 'Fresh Production', name: 'Deli', completed: false },
     { section: 'Fresh Production', name: 'Meat', completed: false },
     { section: 'Fresh Production', name: 'Starbucks', completed: false },
     { section: 'Fresh Production', name: 'Murrays', completed: false },
-    { section: 'Directed Replenishment', name: 'HABA', completed: false },
-    { section: 'Directed Replenishment', name: 'Produce', completed: false },
-    { section: 'Observations', name: 'Daily Backroom Counts', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - AM', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - PM', completed: false },
-    { section: 'Observations', name: 'Product Date Management', completed: false },
-    { section: 'Observations', name: 'Top Stock', completed: false },
+    { section: 'Replenishment', name: 'HABA', completed: false },
+    { section: 'Replenishment', name: 'Produce', completed: false },
+    ...ChecklistComponent.backroomCountTasks(),
     ];
+  }
+
+  private static readonly BACKROOM_SECTION = 'Backroom/Daily Counts';
+  private static readonly BACKROOM_DEPARTMENTS = [
+    'Produce', 'Deli', 'Bakery', "Murray's", 'Meat', 'Seafood', 'Grocery', 'HBC',
+  ];
+
+  private static backroomCountTasks(): Task[] {
+    return ChecklistComponent.BACKROOM_DEPARTMENTS.map(name => ({
+      section: ChecklistComponent.BACKROOM_SECTION,
+      name,
+      completed: false,
+      checks: [
+        { label: 'Backroom', completed: false },
+        { label: 'Daily Counts', completed: false },
+      ],
+    }));
+  }
+
+  /**
+   * Version of the built-in section layout. Saved checklists from an older layout
+   * are upgraded once; after that, sections are fully user-editable and are never
+   * touched by the upgrade again.
+   */
+  private static readonly LAYOUT_VERSION = 3;
+
+  /** Version 2: sections retired from the checklist — dropped from data saved under layout 1 */
+  private static readonly REMOVED_SECTIONS = ['Period', 'Daily To Do', 'Go Spot Check', 'Observations', 'Weekly'];
+
+  /** Version 2: sections that were renamed — data saved under layout 1 is remapped to the new name */
+  private static readonly RENAMED_SECTIONS: Record<string, string> = {
+    'Directed Replenishment': 'Replenishment',
+  };
+
+  /** Version 3: sections renamed after editing was introduced */
+  private static readonly RENAMED_SECTIONS_V3: Record<string, string> = {
+    'Daily Processes': 'Equipment Inspections',
+  };
+
+  /**
+   * Brings tasks saved under an older layout in line with the current one. Custom
+   * tasks added by users in other sections are left untouched.
+   */
+  private upgradeLayout(tasks: Task[], layoutVersion?: number): { tasks: Task[]; upgraded: boolean } {
+    const fromVersion = layoutVersion ?? 1;
+    if (fromVersion >= ChecklistComponent.LAYOUT_VERSION) {
+      return { tasks, upgraded: false };
+    }
+    let upgraded = tasks;
+    if (fromVersion < 2) {
+      upgraded = upgraded
+        .filter(t => !ChecklistComponent.REMOVED_SECTIONS.includes(t.section))
+        .map(t => ({
+          ...t,
+          section: ChecklistComponent.RENAMED_SECTIONS[t.section] ?? t.section,
+        }));
+      if (!upgraded.some(t => t.section === ChecklistComponent.BACKROOM_SECTION)) {
+        upgraded.push(...ChecklistComponent.backroomCountTasks());
+      }
+    }
+    if (fromVersion < 3) {
+      upgraded = upgraded.map(t => ({
+        ...t,
+        section: ChecklistComponent.RENAMED_SECTIONS_V3[t.section] ?? t.section,
+      }));
+    }
+    return { tasks: upgraded, upgraded: true };
+  }
+
+  /** Plain copy of tasks without UI state, optionally with all checkboxes cleared */
+  private serializeTasks(tasks: Task[], reset = false): Task[] {
+    return tasks.map(t => ({
+      section: t.section,
+      name: t.name,
+      completed: reset ? false : t.completed,
+      ...(t.checks?.length
+        ? { checks: t.checks.map(c => ({ label: c.label, completed: reset ? false : c.completed })) }
+        : {}),
+    }));
   }
 
   constructor(private cdr: ChangeDetectorRef) {
@@ -204,15 +302,16 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
       const data = await res.json();
       if (data.exists && data.tasks && data.tasks.length > 0) {
-        this.tasks = data.tasks;
+        const { tasks, upgraded } = this.upgradeLayout(data.tasks, data.layoutVersion);
+        this.tasks = tasks;
         this.cloudVersion = data.version;
-      } else {
-        // No cloud data yet — use defaults (or localStorage as migration)
-        const localKey = `checklist-${this.dateKey}`;
-        const saved = localStorage.getItem(localKey);
-        if (saved) {
-          this.tasks = JSON.parse(saved);
+        // Push the upgraded layout back so other devices pick it up too
+        if (upgraded) {
+          await this.saveToCloud();
         }
+      } else {
+        // No cloud data yet — use localStorage (migration) or the saved template
+        this.tasks = this.readLocalTasks() ?? await this.loadTemplate();
         // Push initial state to cloud
         await this.saveToCloud();
       }
@@ -234,11 +333,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     try {
       const payload = {
         date: this.dateKey,
-        tasks: this.tasks.map(t => ({
-          section: t.section,
-          name: t.name,
-          completed: t.completed,
-        })),
+        layoutVersion: ChecklistComponent.LAYOUT_VERSION,
+        tasks: this.serializeTasks(this.tasks),
       };
 
       const res = await fetch(`/api/checklist/${this.getDateKey()}`, {
@@ -276,7 +372,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   private async pollForChanges(): Promise<void> {
-    if (this.isSaving) return;
+    // Don't swap data out from under an in-progress edit; the next poll catches up
+    if (this.isSaving || this.editingTask || this.editingSection) return;
 
     // Check if the day has changed in Pacific time (midnight PST/PDT rollover)
     const currentPacificDate = this.getPacificDateKey();
@@ -293,7 +390,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       if (data.exists && data.version > this.cloudVersion) {
         // Newer version available — update local state
         this.cloudVersion = data.version;
-        this.tasks = data.tasks;
+        this.tasks = this.upgradeLayout(data.tasks, data.layoutVersion).tasks;
         this.saveTasksToLocal();
         this.syncStatus = 'synced';
         this.cdr.markForCheck();
@@ -307,13 +404,10 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   private async handleNewDay(newDateKey: string): Promise<void> {
     // Save history for the previous day before resetting
     try {
-      const completion = Math.round(
-        (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
-      );
       const record: TaskHistory = {
         date: this.dateKey,
-        tasks: JSON.parse(JSON.stringify(this.tasks)),
-        completionPercentage: completion,
+        tasks: this.serializeTasks(this.tasks),
+        completionPercentage: this.completionFor(this.tasks),
       };
       await fetch('/api/history', {
         method: 'POST',
@@ -356,7 +450,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       const data = await res.json();
       if (data.exists && data.tasks && data.tasks.length > 0) {
         this.cloudVersion = data.version;
-        this.tasks = data.tasks;
+        this.tasks = this.upgradeLayout(data.tasks, data.layoutVersion).tasks;
         this.saveTasksToLocal();
       }
       this.syncStatus = 'synced';
@@ -395,14 +489,18 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     this.debouncedSaveToCloud();
   }
 
+  toggleCheck(task: Task, check: TaskCheck) {
+    check.completed = !check.completed;
+    task.completed = !!task.checks?.every(c => c.completed);
+    this.saveTasksToLocal();
+    this.debouncedSaveToCloud();
+  }
+
   saveCompletionPercentage() {
-    const completion = Math.round(
-      (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
-    );
     const record: TaskHistory = {
       date: this.dateKey,
-      tasks: JSON.parse(JSON.stringify(this.tasks)),
-      completionPercentage: completion
+      tasks: this.serializeTasks(this.tasks),
+      completionPercentage: this.completionFor(this.tasks)
     };
     fetch('/api/history', {
       method: 'POST',
@@ -416,11 +514,11 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   completedTasksCount(section: string): number {
-    return this.getTasksBySection(section).filter(t => t.completed).length;
+    return this.countUnits(this.getTasksBySection(section)).done;
   }
 
   totalTasksCount(section: string): number {
-    return this.getTasksBySection(section).length;
+    return this.countUnits(this.getTasksBySection(section)).total;
   }
 
   getTasksBySection(section: string): Task[] {
@@ -432,63 +530,165 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   // ------------------- Add / Edit / Delete -------------------
-  addTask() {
-    if (!this.newTaskName.trim() || !this.newTaskSection.trim()) return;
-    this.tasks.push({
-      section: this.newTaskSection.trim(),
-      name: this.newTaskName.trim(),
-      completed: false
-    });
-    this.newTaskName = '';
-    this.newTaskSection = '';
+  /** Persists a structural change (sections/items) to today and to the template for future days */
+  private commitStructureChange() {
     this.saveTasksToLocal();
     this.debouncedSaveToCloud();
+    this.saveTemplate();
+  }
+
+  addTask() {
+    const name = this.newTaskName.trim();
+    const section = this.newTaskSection === this.NEW_SECTION
+      ? this.newSectionName.trim()
+      : this.newTaskSection.trim();
+    if (!name || !section) return;
+
+    // New items in a multi-checkbox section (e.g. Backroom/Daily Counts) get the same checkboxes
+    const sibling = this.getTasksBySection(section).find(t => t.checks?.length);
+    const task: Task = { section, name, completed: false };
+    if (sibling?.checks) {
+      task.checks = sibling.checks.map(c => ({ label: c.label, completed: false }));
+    }
+
+    // Keep the item with the rest of its section
+    const lastIndex = this.tasks.map(t => t.section).lastIndexOf(section);
+    if (lastIndex === -1) {
+      this.tasks.push(task);
+    } else {
+      this.tasks.splice(lastIndex + 1, 0, task);
+    }
+
+    this.newTaskName = '';
+    this.newTaskSection = '';
+    this.newSectionName = '';
+    this.commitStructureChange();
   }
 
   startEditing(task: Task) {
-    task.editing = true;
+    this.editingTask = task;
+    this.editDraft = task.name;
   }
 
-  saveEdit(task: Task, newName: string) {
-    if (!newName.trim()) return;
-    task.name = newName.trim();
-    task.editing = false;
-    this.saveTasksToLocal();
-    this.debouncedSaveToCloud();
+  saveEdit(task: Task) {
+    const newName = this.editDraft.trim();
+    if (!newName) return;
+    task.name = newName;
+    this.editingTask = null;
+    this.commitStructureChange();
   }
 
-  cancelEdit(task: Task) {
-    task.editing = false;
+  cancelEdit() {
+    this.editingTask = null;
+    this.editDraft = '';
   }
 
   deleteTask(task: Task) {
     if (!confirm('Are you sure you want to delete this task?')) return;
     this.tasks = this.tasks.filter(t => t !== task);
     if (this.selectedTask === task) this.selectedTask = null;
-    this.saveTasksToLocal();
-    this.debouncedSaveToCloud();
+    if (this.editingTask === task) this.editingTask = null;
+    this.commitStructureChange();
+  }
+
+  startSectionEdit(section: string) {
+    this.editingSection = section;
+    this.sectionDraft = section;
+  }
+
+  saveSectionEdit(section: string) {
+    const newName = this.sectionDraft.trim();
+    if (!newName) return;
+    if (newName !== section && this.sections().includes(newName)) {
+      alert(`A section named "${newName}" already exists.`);
+      return;
+    }
+    this.tasks.forEach(t => {
+      if (t.section === section) t.section = newName;
+    });
+    if (this.newTaskSection === section) this.newTaskSection = newName;
+    this.editingSection = null;
+    this.commitStructureChange();
+  }
+
+  cancelSectionEdit() {
+    this.editingSection = null;
+    this.sectionDraft = '';
+  }
+
+  deleteSection(section: string) {
+    const count = this.getTasksBySection(section).length;
+    if (!confirm(`Delete the "${section}" section and its ${count} item(s)?`)) return;
+    this.tasks = this.tasks.filter(t => t.section !== section);
+    if (this.selectedTask?.section === section) this.selectedTask = null;
+    if (this.newTaskSection === section) this.newTaskSection = '';
+    this.editingSection = null;
+    this.commitStructureChange();
+  }
+
+  // ------------------- Template -------------------
+  /** Loads the section/item layout new days start from, falling back to the built-in defaults */
+  private async loadTemplate(): Promise<Task[]> {
+    try {
+      const res = await fetch('/api/template');
+      if (!res.ok) throw new Error('Failed to load template');
+      const data = await res.json();
+      if (data.exists && data.tasks?.length > 0) {
+        // Templates were introduced with layout 2, so an unversioned template is layout 2
+        const { tasks, upgraded } = this.upgradeLayout(data.tasks, data.layoutVersion ?? 2);
+        if (upgraded) this.saveTemplate(tasks);
+        return this.serializeTasks(tasks, true);
+      }
+    } catch (err) {
+      console.error('Template load failed, using defaults:', err);
+    }
+    return this.getDefaultTasks();
+  }
+
+  private saveTemplate(tasks: Task[] = this.tasks) {
+    fetch('/api/template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        layoutVersion: ChecklistComponent.LAYOUT_VERSION,
+        tasks: this.serializeTasks(tasks, true),
+      }),
+    }).catch(err => console.error('Failed to save template:', err));
   }
 
   // ------------------- History / Local Storage -------------------
   saveTasksToLocal() {
     const key = `checklist-${this.dateKey}`;
-    localStorage.setItem(key, JSON.stringify(this.tasks));
+    localStorage.setItem(key, JSON.stringify({
+      layoutVersion: ChecklistComponent.LAYOUT_VERSION,
+      tasks: this.serializeTasks(this.tasks),
+    }));
+  }
+
+  /** Reads today's tasks from localStorage (supports the older plain-array format) */
+  private readLocalTasks(): Task[] | null {
+    const saved = localStorage.getItem(`checklist-${this.dateKey}`);
+    if (!saved) return null;
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return this.upgradeLayout(parsed, 1).tasks;
+      if (Array.isArray(parsed?.tasks)) return this.upgradeLayout(parsed.tasks, parsed.layoutVersion).tasks;
+    } catch {
+      // Corrupt local data — ignore it
+    }
+    return null;
   }
 
   private loadTodayTasksLocal() {
-    const key = `checklist-${this.dateKey}`;
-    const saved = localStorage.getItem(key);
-    if (saved) this.tasks = JSON.parse(saved);
+    const saved = this.readLocalTasks();
+    if (saved) this.tasks = saved;
   }
 
   saveHistory() {
-    const completion = Math.round(
-      (this.tasks.filter(t => t.completed).length / this.tasks.length) * 100
-    );
     const record: TaskHistory = {
       date: this.dateKey,
-      tasks: JSON.parse(JSON.stringify(this.tasks)),
-      completionPercentage: completion
+      tasks: this.serializeTasks(this.tasks),
+      completionPercentage: this.completionFor(this.tasks)
     };
     fetch('/api/history', {
       method: 'POST',
