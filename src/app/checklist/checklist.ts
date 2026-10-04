@@ -6,8 +6,18 @@ export interface Task {
   section: string;
   name: string;
   completed: boolean;
+  parent?: string; // name of the top-level task this item is nested under (same section)
+  checks?: TaskCheck[]; // optional sub-checks; the task is complete when all are checked
   editing?: boolean; // for inline editing
+  editingOriginalName?: string; // name before inline edit started (not persisted)
 }
+
+export interface TaskCheck {
+  label: string;
+  completed: boolean;
+}
+
+const BACKROOM_SECTION = 'Backroom/Daily Counts';
 
 export interface TaskHistory {
   date: string;
@@ -94,67 +104,111 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   private getDefaultTasks(): Task[] {
+    const t = (section: string, name: string, extra: Partial<Task> = {}): Task =>
+      ({ section, name, completed: false, ...extra });
+    const counts = (name: string): Task =>
+      t(BACKROOM_SECTION, name, { checks: [{ label: 'Backroom', completed: false }, { label: 'Daily Counts', completed: false }] });
+    const timed = (labels: string[]) => labels.map(label => ({ label, completed: false }));
+
     return [
-    { section: 'Period', name: 'Adult Bev Display Compliance First Wednesday of the Period', completed: false },
-    { section: 'Daily To Do', name: 'Emergency Exit Survey', completed: false },
-    { section: 'Daily To Do', name: 'Wall To Wall - Bakery', completed: false },
-    { section: 'Daily To Do', name: 'Wall To Wall - Grocery', completed: false },
-    { section: 'Go Spot Check', name: 'Morning (11am-2pm)', completed: false },
-    { section: 'Go Spot Check', name: 'Afternoon (2pm-5pm)', completed: false },
-    { section: 'Go Spot Check', name: 'Evening (5pm-8pm)', completed: false },
-    { section: 'Store Leader Walk', name: 'Grocery Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Drug/Gm Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Pick Up Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Produce/Floral Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Deli Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Bakery Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Meat and Seafood Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Front End Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Pharmacy Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Home Store Leader', completed: false },
-    { section: 'Store Leader Walk', name: 'Apparel Store Leader', completed: false },
-    { section: 'Dept Leader', name: 'Grocery Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Drug/Gm Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Pick Up Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Produce/Floral Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Deli Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Starbucks Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Bakery Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Meat and Seafood Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Front End Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Pharmacy Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Home Dept Leader', completed: false },
-    { section: 'Dept Leader', name: 'Apparel Dept Leader', completed: false },
-    { section: 'Closing MOD Duties', name: 'Getting a Good Close GSC', completed: false },
-    { section: 'Closing MOD Duties', name: 'Trash', completed: false },
-    { section: 'Closing MOD Duties', name: 'Sign Getting a Good Close', completed: false },
-    { section: 'Weekly', name: 'Sustainment Check on Monday', completed: false },
-    { section: 'Weekly', name: 'Quick Post Schedule on Thursday', completed: false },
-    { section: 'Weekly', name: 'Center Store / HABA Merchandise Plan GSC on Wednesday', completed: false },
-    { section: 'Weekly', name: 'Monday Wall 2 Wall', completed: false },
-    { section: 'Weekly', name: 'FSSR Go Spot Check', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Balers', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Battery PIT (AM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Battery PIT (PM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Propane PIT (AM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Propane PIT (PM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Oven', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Slicers', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Meat Saw', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Grinder', completed: false },
-    { section: 'Fresh Production', name: 'Bakery', completed: false },
-    { section: 'Fresh Production', name: 'Deli', completed: false },
-    { section: 'Fresh Production', name: 'Meat', completed: false },
-    { section: 'Fresh Production', name: 'Starbucks', completed: false },
-    { section: 'Fresh Production', name: 'Murrays', completed: false },
-    { section: 'Directed Replenishment', name: 'HABA', completed: false },
-    { section: 'Directed Replenishment', name: 'Produce', completed: false },
-    { section: 'Observations', name: 'Daily Backroom Counts', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - AM', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - PM', completed: false },
-    { section: 'Observations', name: 'Product Date Management', completed: false },
-    { section: 'Observations', name: 'Top Stock', completed: false },
+    t('Store Leader Walk', 'Grocery Store Leader'),
+    t('Store Leader Walk', 'Drug/Gm Store Leader'),
+    t('Store Leader Walk', 'Pick Up Store Leader'),
+    t('Store Leader Walk', 'Produce/Floral Store Leader'),
+    t('Store Leader Walk', 'Deli Store Leader'),
+    t('Store Leader Walk', 'Bakery Store Leader'),
+    t('Store Leader Walk', 'Meat and Seafood Store Leader'),
+    t('Store Leader Walk', 'Front End Store Leader'),
+    t('Store Leader Walk', 'Pharmacy Store Leader'),
+    t('Store Leader Walk', 'Home Store Leader'),
+    t('Store Leader Walk', 'Apparel Store Leader'),
+    t('Dept Leader', 'Grocery Dept Leader'),
+    t('Dept Leader', 'Drug/Gm Dept Leader'),
+    t('Dept Leader', 'Pick Up Dept Leader'),
+    t('Dept Leader', 'Produce/Floral Dept Leader'),
+    t('Dept Leader', 'Deli Dept Leader'),
+    t('Dept Leader', 'Starbucks Dept Leader'),
+    t('Dept Leader', 'Bakery Dept Leader'),
+    t('Dept Leader', 'Meat and Seafood Dept Leader'),
+    t('Dept Leader', 'Front End Dept Leader'),
+    t('Dept Leader', 'Pharmacy Dept Leader'),
+    t('Dept Leader', 'Home Dept Leader'),
+    t('Dept Leader', 'Apparel Dept Leader'),
+    t('Closing MOD Duties', 'Getting a Good Close GSC'),
+    t('Closing MOD Duties', 'Trash'),
+    t('Equipment Inspections', 'Balers'),
+    t('Equipment Inspections', 'Battery PIT (AM)'),
+    t('Equipment Inspections', 'Battery PIT (PM)'),
+    t('Equipment Inspections', 'Propane PIT (AM)'),
+    t('Equipment Inspections', 'Propane PIT (PM)'),
+    t('Equipment Inspections', 'Oven'),
+    t('Equipment Inspections', 'Slicers'),
+    t('Equipment Inspections', 'Meat Saw'),
+    t('Equipment Inspections', 'Grinder'),
+    t('Fresh Production', 'Bakery'),
+    t('Fresh Production', 'Prep for Today', { parent: 'Bakery' }),
+    t('Fresh Production', 'Prep for Tomorrow', { parent: 'Bakery' }),
+    t('Fresh Production', 'Thaw and Sell', { parent: 'Bakery' }),
+    t('Fresh Production', 'Cookies', { parent: 'Bakery' }),
+    t('Fresh Production', 'Deli'),
+    t('Fresh Production', 'FSGNG', { parent: 'Deli' }),
+    t('Fresh Production', 'Hot Production', { parent: 'Deli', checks: timed(['12pm', '2pm', '4pm', '6pm']) }),
+    t('Fresh Production', 'Cold Production', { parent: 'Deli' }),
+    t('Fresh Production', 'Thaw and Sell', { parent: 'Deli' }),
+    t('Fresh Production', 'Meat'),
+    t('Fresh Production', 'Production', { parent: 'Meat' }),
+    t('Fresh Production', 'Meat Thaw and Sell', { parent: 'Meat' }),
+    t('Fresh Production', 'Seafood Thaw and Sell', { parent: 'Meat', checks: timed(['12pm', '4pm']) }),
+    t('Fresh Production', 'Starbucks'),
+    t('Fresh Production', 'Murrays'),
+    t('Replenishment', 'HABA'),
+    t('Replenishment', 'Produce'),
+    counts('Produce'),
+    t(BACKROOM_SECTION, 'Produce Bulk', { parent: 'Produce' }),
+    counts('Deli'),
+    t(BACKROOM_SECTION, 'Deli Bulk', { parent: 'Deli' }),
+    counts('Bakery'),
+    counts("Murray's"),
+    counts('Meat'),
+    counts('Seafood'),
+    t(BACKROOM_SECTION, 'Seafood Bulk', { parent: 'Seafood' }),
+    counts('Grocery'),
+    counts('HBC'),
+    counts('Comm Bakery'),
+    counts('Dairy'),
+    counts('Liquor'),
+    counts('Packaged Meat'),
+    counts('Pharmacy'),
+    counts('Tobacco'),
     ];
+  }
+
+  /**
+   * Inserts default tasks that are missing from a saved checklist (e.g. items added
+   * to the defaults after today's list was created). Only applies to sections the
+   * saved list already has, so sections removed by the user stay removed.
+   */
+  private mergeMissingDefaults(tasks: Task[]): Task[] {
+    const merged = [...tasks];
+    const key = (t: Task) => `${t.section}|${t.parent ?? ''}|${t.name}`;
+    const existing = new Set(merged.map(key));
+    let added = false;
+
+    for (const def of this.getDefaultTasks()) {
+      if (existing.has(key(def)) || !merged.some(t => t.section === def.section)) continue;
+      if (def.parent && !merged.some(t => t.section === def.section && !t.parent && t.name === def.parent)) continue;
+
+      // Insert after the last task in the same group (parent + its children), else end of section
+      let idx = -1;
+      merged.forEach((t, i) => {
+        if (t.section !== def.section) return;
+        if (!def.parent || (!t.parent && t.name === def.parent) || t.parent === def.parent) idx = i;
+      });
+      merged.splice(idx + 1, 0, { ...def, checks: def.checks?.map(c => ({ ...c })) });
+      existing.add(key(def));
+      added = true;
+    }
+    return added ? merged : tasks;
   }
 
   constructor(private cdr: ChangeDetectorRef) {
@@ -204,8 +258,12 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
       const data = await res.json();
       if (data.exists && data.tasks && data.tasks.length > 0) {
-        this.tasks = data.tasks;
+        this.tasks = this.mergeMissingDefaults(data.tasks);
         this.cloudVersion = data.version;
+        if (this.tasks !== data.tasks) {
+          // New default items were added — push them so other devices see them
+          await this.saveToCloud();
+        }
       } else {
         // No cloud data yet — use defaults (or localStorage as migration)
         const localKey = `checklist-${this.dateKey}`;
@@ -238,6 +296,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
           section: t.section,
           name: t.name,
           completed: t.completed,
+          ...(t.parent ? { parent: t.parent } : {}),
+          ...(t.checks ? { checks: t.checks.map(c => ({ label: c.label, completed: c.completed })) } : {}),
         })),
       };
 
@@ -390,9 +450,36 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   // ------------------- Task Management -------------------
   toggleTask(task: Task) {
-    task.completed = !task.completed;
+    this.setTaskCompleted(task, !task.completed);
+    // Checking/unchecking a parent applies to all of its nested items
+    for (const child of this.getChildTasks(task)) {
+      this.setTaskCompleted(child, task.completed);
+    }
+    this.updateParentCompletion(task);
     this.saveTasksToLocal();
     this.debouncedSaveToCloud();
+  }
+
+  toggleCheck(task: Task, check: TaskCheck) {
+    check.completed = !check.completed;
+    task.completed = task.checks!.every(c => c.completed) && this.getChildTasks(task).every(c => c.completed);
+    this.updateParentCompletion(task);
+    this.saveTasksToLocal();
+    this.debouncedSaveToCloud();
+  }
+
+  private setTaskCompleted(task: Task, completed: boolean) {
+    task.completed = completed;
+    task.checks?.forEach(c => (c.completed = completed));
+  }
+
+  /** A parent is complete once all of its nested items are complete */
+  private updateParentCompletion(task: Task) {
+    if (!task.parent) return;
+    const parent = this.tasks.find(t => t.section === task.section && !t.parent && t.name === task.parent);
+    if (!parent) return;
+    const children = this.getChildTasks(parent);
+    parent.completed = children.every(c => c.completed) && (parent.checks ?? []).every(c => c.completed);
   }
 
   saveCompletionPercentage() {
@@ -427,6 +514,16 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     return this.tasks.filter(t => t.section === section);
   }
 
+  /** Top-level tasks in a section (nested items are rendered under their parent) */
+  getRootTasks(section: string): Task[] {
+    return this.tasks.filter(t => t.section === section && !t.parent);
+  }
+
+  getChildTasks(task: Task): Task[] {
+    if (task.parent) return [];
+    return this.tasks.filter(t => t.section === task.section && t.parent === task.name);
+  }
+
   sections(): string[] {
     return [...new Set(this.tasks.map(t => t.section))];
   }
@@ -446,11 +543,19 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   startEditing(task: Task) {
+    task.editingOriginalName = task.name;
     task.editing = true;
   }
 
   saveEdit(task: Task, newName: string) {
     if (!newName.trim()) return;
+    // Keep nested items attached when a parent is renamed
+    if (!task.parent && task.editingOriginalName && task.editingOriginalName !== newName.trim()) {
+      this.tasks
+        .filter(t => t.section === task.section && t.parent === task.editingOriginalName)
+        .forEach(t => (t.parent = newName.trim()));
+    }
+    delete task.editingOriginalName;
     task.name = newName.trim();
     task.editing = false;
     this.saveTasksToLocal();
@@ -458,12 +563,19 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   cancelEdit(task: Task) {
+    if (task.editingOriginalName !== undefined) task.name = task.editingOriginalName;
+    delete task.editingOriginalName;
     task.editing = false;
   }
 
   deleteTask(task: Task) {
-    if (!confirm('Are you sure you want to delete this task?')) return;
-    this.tasks = this.tasks.filter(t => t !== task);
+    const children = this.getChildTasks(task);
+    const message = children.length
+      ? `Delete this task and its ${children.length} nested item(s)?`
+      : 'Are you sure you want to delete this task?';
+    if (!confirm(message)) return;
+    this.tasks = this.tasks.filter(t => t !== task && !children.includes(t));
+    this.updateParentCompletion(task);
     if (this.selectedTask === task) this.selectedTask = null;
     this.saveTasksToLocal();
     this.debouncedSaveToCloud();
