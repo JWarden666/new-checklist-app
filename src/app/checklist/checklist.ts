@@ -60,7 +60,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   newTaskSection: string = '';
 
   // Backstock count schedule
-  static readonly COUNT_SECTION = 'Observations';
+  static readonly COUNT_SECTION = "Today's Counts";
+  private static readonly LEGACY_COUNT_SECTION = 'Observations';
   private static readonly LEGACY_COUNT_TASK = 'Daily Backroom Counts';
   readonly weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   countSchedule: ScheduledCount[] = [];
@@ -185,16 +186,37 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Fresh Production', name: 'Murrays', completed: false },
     { section: 'Directed Replenishment', name: 'HABA', completed: false },
     { section: 'Directed Replenishment', name: 'Produce', completed: false },
-    { section: 'Observations', name: 'Daily Backroom Counts', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - AM', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - PM', completed: false },
-    { section: 'Observations', name: 'Product Date Management', completed: false },
-    { section: 'Observations', name: 'Top Stock', completed: false },
+    { section: "Today's Counts", name: 'Fix and Fills - AM', completed: false },
+    { section: "Today's Counts", name: 'Fix and Fills - PM', completed: false },
+    { section: "Today's Counts", name: 'Product Date Management', completed: false },
+    { section: "Today's Counts", name: 'Top Stock', completed: false },
     ];
   }
 
   private makeChecks(labels: string[]): TaskCheck[] {
     return labels.map(label => ({ label, completed: false }));
+  }
+
+  /**
+   * Brings a saved day up to the current layout: renames the old "Observations" section to
+   * "Today's Counts", drops the retired "Daily Backroom Counts" item and adds missing
+   * default sub-items. Returns true if tasks changed.
+   */
+  private normalizeTasks(tasks: Task[]): boolean {
+    let changed = false;
+    for (let i = tasks.length - 1; i >= 0; i--) {
+      const t = tasks[i];
+      if (t.section === ChecklistComponent.LEGACY_COUNT_SECTION) {
+        t.section = ChecklistComponent.COUNT_SECTION;
+        changed = true;
+      }
+      if (t.section === ChecklistComponent.COUNT_SECTION && !t.parent &&
+          t.countId == null && t.name === ChecklistComponent.LEGACY_COUNT_TASK) {
+        tasks.splice(i, 1);
+        changed = true;
+      }
+    }
+    return this.mergeDefaultSubItems(tasks) || changed;
   }
 
   /**
@@ -286,7 +308,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       if (data.exists && data.tasks && data.tasks.length > 0) {
         this.tasks = data.tasks;
         this.cloudVersion = data.version;
-        const merged = this.mergeDefaultSubItems(this.tasks);
+        const merged = this.normalizeTasks(this.tasks);
         if (this.applySchedule() || merged) {
           await this.saveToCloud();
         }
@@ -296,7 +318,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
         const saved = localStorage.getItem(localKey);
         if (saved) {
           this.tasks = JSON.parse(saved);
-          this.mergeDefaultSubItems(this.tasks);
+          this.normalizeTasks(this.tasks);
         }
         this.applySchedule();
         // Push initial state to cloud
@@ -383,7 +405,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
         // Newer version available — update local state
         this.cloudVersion = data.version;
         this.tasks = data.tasks;
-        if (this.applySchedule()) {
+        const normalized = this.normalizeTasks(this.tasks);
+        if (this.applySchedule() || normalized) {
           this.debouncedSaveToCloud();
         }
         this.saveTasksToLocal();
@@ -451,7 +474,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
         this.cloudVersion = data.version;
         this.tasks = data.tasks;
       }
-      if (this.applySchedule()) {
+      const normalized = this.normalizeTasks(this.tasks);
+      if (this.applySchedule() || normalized) {
         this.debouncedSaveToCloud();
       }
       this.saveTasksToLocal();
@@ -507,36 +531,28 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
     const weekday = this.getCurrentWeekday();
     const section = ChecklistComponent.COUNT_SECTION;
-    const legacyName = ChecklistComponent.LEGACY_COUNT_TASK;
     const scheduledNames = new Set(this.countSchedule.map(c => c.name));
 
-    // A task belongs to the count slot if it is tagged with a count id, is the original
-    // "Daily Backroom Counts" item, or is an untagged copy of a scheduled count (a device
-    // still running the previous app version strips the count id when it saves).
+    // A task belongs to the count slot if it is tagged with a count id, or is an untagged
+    // copy of a scheduled count (a device still running an earlier app version strips
+    // the count id when it saves).
     const isCountSlot = (t: Task) =>
-      !t.parent &&
-      (t.countId != null ||
-        (t.section === section && (t.name === legacyName || scheduledNames.has(t.name))));
+      !t.parent && (t.countId != null || (t.section === section && scheduledNames.has(t.name)));
 
     const byId = new Map(this.tasks.filter(t => t.countId != null).map(t => [t.countId, t]));
     const byName = new Map(
       this.tasks.filter(t => t.countId == null && isCountSlot(t)).map(t => [t.name, t])
     );
 
-    let dueTasks: Task[];
-    if (this.countSchedule.length === 0) {
-      // No schedule set up yet: keep the original single "Daily Backroom Counts" item
-      dueTasks = [byName.get(legacyName) ?? { section, name: legacyName, completed: false }];
-    } else {
-      dueTasks = this.countSchedule
-        .filter(c => c.days.includes(weekday))
-        .map(c => {
-          const task = byId.get(c.id) ?? byName.get(c.name) ?? { section, name: c.name, completed: false };
-          task.name = c.name;
-          task.countId = c.id;
-          return task;
-        });
-    }
+    const dueTasks: Task[] = this.countSchedule
+      .filter(c => c.days.includes(weekday))
+      .map(c => {
+        const task = byId.get(c.id) ?? byName.get(c.name) ?? { section, name: c.name, completed: false };
+        task.name = c.name;
+        task.section = section;
+        task.countId = c.id;
+        return task;
+      });
 
     const before = JSON.stringify(this.tasks.map(t => [t.section, t.name, t.completed, t.countId]));
     const result: Task[] = [];
@@ -800,7 +816,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     const saved = localStorage.getItem(key);
     if (saved) {
       this.tasks = JSON.parse(saved);
-      this.mergeDefaultSubItems(this.tasks);
+      this.normalizeTasks(this.tasks);
     }
   }
 
