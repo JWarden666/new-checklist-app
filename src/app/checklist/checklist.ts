@@ -95,13 +95,6 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   private getDefaultTasks(): Task[] {
     return [
-    { section: 'Period', name: 'Adult Bev Display Compliance First Wednesday of the Period', completed: false },
-    { section: 'Daily To Do', name: 'Emergency Exit Survey', completed: false },
-    { section: 'Daily To Do', name: 'Wall To Wall - Bakery', completed: false },
-    { section: 'Daily To Do', name: 'Wall To Wall - Grocery', completed: false },
-    { section: 'Go Spot Check', name: 'Morning (11am-2pm)', completed: false },
-    { section: 'Go Spot Check', name: 'Afternoon (2pm-5pm)', completed: false },
-    { section: 'Go Spot Check', name: 'Evening (5pm-8pm)', completed: false },
     { section: 'Store Leader Walk', name: 'Grocery Store Leader', completed: false },
     { section: 'Store Leader Walk', name: 'Drug/Gm Store Leader', completed: false },
     { section: 'Store Leader Walk', name: 'Pick Up Store Leader', completed: false },
@@ -147,14 +140,31 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Fresh Production', name: 'Meat', completed: false },
     { section: 'Fresh Production', name: 'Starbucks', completed: false },
     { section: 'Fresh Production', name: 'Murrays', completed: false },
-    { section: 'Directed Replenishment', name: 'HABA', completed: false },
-    { section: 'Directed Replenishment', name: 'Produce', completed: false },
-    { section: 'Observations', name: 'Daily Backroom Counts', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - AM', completed: false },
-    { section: 'Observations', name: 'Fix and Fills - PM', completed: false },
-    { section: 'Observations', name: 'Product Date Management', completed: false },
-    { section: 'Observations', name: 'Top Stock', completed: false },
+    { section: 'Replenishment', name: 'HABA', completed: false },
+    { section: 'Replenishment', name: 'Produce', completed: false },
     ];
+  }
+
+  /** Sections retired from the checklist — dropped from any previously saved data */
+  private static readonly REMOVED_SECTIONS = ['Period', 'Daily To Do', 'Go Spot Check', 'Observations'];
+
+  /** Sections that were renamed — previously saved data is remapped to the new name */
+  private static readonly RENAMED_SECTIONS: Record<string, string> = {
+    'Directed Replenishment': 'Replenishment',
+  };
+
+  /**
+   * Brings saved tasks in line with the current section layout so that data stored
+   * before a section was removed or renamed doesn't resurface. Custom tasks added
+   * by users in other sections are left untouched.
+   */
+  private migrateTasks(tasks: Task[]): Task[] {
+    return tasks
+      .filter(t => !ChecklistComponent.REMOVED_SECTIONS.includes(t.section))
+      .map(t => ({
+        ...t,
+        section: ChecklistComponent.RENAMED_SECTIONS[t.section] ?? t.section,
+      }));
   }
 
   constructor(private cdr: ChangeDetectorRef) {
@@ -204,14 +214,20 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
       const data = await res.json();
       if (data.exists && data.tasks && data.tasks.length > 0) {
-        this.tasks = data.tasks;
+        const migrated = this.migrateTasks(data.tasks);
+        const changed = JSON.stringify(migrated) !== JSON.stringify(data.tasks);
+        this.tasks = migrated;
         this.cloudVersion = data.version;
+        // Push the migrated layout back so other devices pick it up too
+        if (changed) {
+          await this.saveToCloud();
+        }
       } else {
         // No cloud data yet — use defaults (or localStorage as migration)
         const localKey = `checklist-${this.dateKey}`;
         const saved = localStorage.getItem(localKey);
         if (saved) {
-          this.tasks = JSON.parse(saved);
+          this.tasks = this.migrateTasks(JSON.parse(saved));
         }
         // Push initial state to cloud
         await this.saveToCloud();
@@ -293,7 +309,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       if (data.exists && data.version > this.cloudVersion) {
         // Newer version available — update local state
         this.cloudVersion = data.version;
-        this.tasks = data.tasks;
+        this.tasks = this.migrateTasks(data.tasks);
         this.saveTasksToLocal();
         this.syncStatus = 'synced';
         this.cdr.markForCheck();
@@ -356,7 +372,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       const data = await res.json();
       if (data.exists && data.tasks && data.tasks.length > 0) {
         this.cloudVersion = data.version;
-        this.tasks = data.tasks;
+        this.tasks = this.migrateTasks(data.tasks);
         this.saveTasksToLocal();
       }
       this.syncStatus = 'synced';
@@ -478,7 +494,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   private loadTodayTasksLocal() {
     const key = `checklist-${this.dateKey}`;
     const saved = localStorage.getItem(key);
-    if (saved) this.tasks = JSON.parse(saved);
+    if (saved) this.tasks = this.migrateTasks(JSON.parse(saved));
   }
 
   saveHistory() {
