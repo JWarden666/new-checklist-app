@@ -497,3 +497,113 @@ li:not(.task-done) .task-status {
   .checklist-container { padding: 5px; }
   .save-btn { width: 100%; }
 }
+/* Section header + editing */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.section-header-editing {
+  margin: 10px 0;
+}
+
+.section-name-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 6px 8px;
+  border: 1px solid #0033a0;
+  border-radius: 4px;
+  font-size: 1em;
+  font-weight: bold;
+}
+
+.section-edit-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.section-edit-btn {
+  background-color: #fff;
+  color: #0033a0;
+  border: 1px solid #0033a0;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.8em;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.section-edit-btn:hover {
+  background-color: #0033a0;
+  color: #fff;
+}
+
+.section-edit-btn.danger {
+  color: #c62828;
+  border-color: #c62828;
+}
+
+.section-edit-btn.danger:hover {
+  background-color: #c62828;
+  color: #fff;
+}
+
+/* Task rows */
+.task-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-name-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 6px;
+  border: 1px solid #0033a0;
+  border-radius: 4px;
+}
+
+/* Multi-checkbox items (Backroom / Daily Counts) */
+.task-checks {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.check-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid #ccc;
+  border-radius: 14px;
+  font-size: 0.85em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.check-pill input[type="checkbox"] { margin: 0 5px 0 0; }
+
+.check-pill.check-done {
+  background-color: #e8f5e9;
+  border-color: #43a047;
+  color: #2e7d32;
+}
+
+.history-checks {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 0.85em;
+  color: #c62828;
+}
+
+.history-checks .check-done { color: #2e7d32; }

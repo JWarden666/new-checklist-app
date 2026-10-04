@@ -23,13 +23,14 @@ export default async (req: Request, context: Context) => {
       exists: true,
       version: record.version || 0,
       tasks: record.tasks || [],
+      layoutVersion: record.layoutVersion || 1,
       lastUpdated: record.lastUpdated || null,
     });
   }
 
   if (req.method === 'POST') {
     const body = await req.json();
-    const { tasks } = body;
+    const { tasks, layoutVersion } = body;
     const date = context.params.date;
 
     if (!date || !tasks) {
@@ -44,6 +45,7 @@ export default async (req: Request, context: Context) => {
     const record = {
       date,
       tasks,
+      layoutVersion: layoutVersion || 1,
       version: newVersion,
       lastUpdated: new Date().toISOString(),
     };
