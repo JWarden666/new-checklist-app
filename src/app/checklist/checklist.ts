@@ -156,15 +156,15 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Closing MOD Duties', name: 'Getting a Good Close GSC', completed: false },
     { section: 'Closing MOD Duties', name: 'Trash', completed: false },
     { section: 'Closing MOD Duties', name: 'Sign Getting a Good Close', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Balers', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Battery PIT (AM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Battery PIT (PM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Propane PIT (AM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Propane PIT (PM)', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Oven', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Slicers', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Meat Saw', completed: false },
-    { section: 'Daily Processes', name: 'Equipment Inspections - Grinder', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Balers', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Battery PIT (AM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Battery PIT (PM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Propane PIT (AM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Propane PIT (PM)', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Oven', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Slicers', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Meat Saw', completed: false },
+    { section: 'Equipment Inspections', name: 'Equipment Inspections - Grinder', completed: false },
     { section: 'Fresh Production', name: 'Bakery', completed: false },
     { section: 'Fresh Production', name: 'Deli', completed: false },
     { section: 'Fresh Production', name: 'Meat', completed: false },
@@ -198,14 +198,19 @@ export class ChecklistComponent implements OnInit, OnDestroy {
    * are upgraded once; after that, sections are fully user-editable and are never
    * touched by the upgrade again.
    */
-  private static readonly LAYOUT_VERSION = 2;
+  private static readonly LAYOUT_VERSION = 3;
 
-  /** Sections retired from the checklist — dropped from data saved under an older layout */
+  /** Version 2: sections retired from the checklist — dropped from data saved under layout 1 */
   private static readonly REMOVED_SECTIONS = ['Period', 'Daily To Do', 'Go Spot Check', 'Observations', 'Weekly'];
 
-  /** Sections that were renamed — data saved under an older layout is remapped to the new name */
+  /** Version 2: sections that were renamed — data saved under layout 1 is remapped to the new name */
   private static readonly RENAMED_SECTIONS: Record<string, string> = {
     'Directed Replenishment': 'Replenishment',
+  };
+
+  /** Version 3: sections renamed after editing was introduced */
+  private static readonly RENAMED_SECTIONS_V3: Record<string, string> = {
+    'Daily Processes': 'Equipment Inspections',
   };
 
   /**
@@ -213,17 +218,27 @@ export class ChecklistComponent implements OnInit, OnDestroy {
    * tasks added by users in other sections are left untouched.
    */
   private upgradeLayout(tasks: Task[], layoutVersion?: number): { tasks: Task[]; upgraded: boolean } {
-    if ((layoutVersion ?? 1) >= ChecklistComponent.LAYOUT_VERSION) {
+    const fromVersion = layoutVersion ?? 1;
+    if (fromVersion >= ChecklistComponent.LAYOUT_VERSION) {
       return { tasks, upgraded: false };
     }
-    const upgraded = tasks
-      .filter(t => !ChecklistComponent.REMOVED_SECTIONS.includes(t.section))
-      .map(t => ({
+    let upgraded = tasks;
+    if (fromVersion < 2) {
+      upgraded = upgraded
+        .filter(t => !ChecklistComponent.REMOVED_SECTIONS.includes(t.section))
+        .map(t => ({
+          ...t,
+          section: ChecklistComponent.RENAMED_SECTIONS[t.section] ?? t.section,
+        }));
+      if (!upgraded.some(t => t.section === ChecklistComponent.BACKROOM_SECTION)) {
+        upgraded.push(...ChecklistComponent.backroomCountTasks());
+      }
+    }
+    if (fromVersion < 3) {
+      upgraded = upgraded.map(t => ({
         ...t,
-        section: ChecklistComponent.RENAMED_SECTIONS[t.section] ?? t.section,
+        section: ChecklistComponent.RENAMED_SECTIONS_V3[t.section] ?? t.section,
       }));
-    if (!upgraded.some(t => t.section === ChecklistComponent.BACKROOM_SECTION)) {
-      upgraded.push(...ChecklistComponent.backroomCountTasks());
     }
     return { tasks: upgraded, upgraded: true };
   }
@@ -619,7 +634,10 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       if (!res.ok) throw new Error('Failed to load template');
       const data = await res.json();
       if (data.exists && data.tasks?.length > 0) {
-        return this.serializeTasks(data.tasks, true);
+        // Templates were introduced with layout 2, so an unversioned template is layout 2
+        const { tasks, upgraded } = this.upgradeLayout(data.tasks, data.layoutVersion ?? 2);
+        if (upgraded) this.saveTemplate(tasks);
+        return this.serializeTasks(tasks, true);
       }
     } catch (err) {
       console.error('Template load failed, using defaults:', err);
@@ -627,11 +645,14 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     return this.getDefaultTasks();
   }
 
-  private saveTemplate() {
+  private saveTemplate(tasks: Task[] = this.tasks) {
     fetch('/api/template', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tasks: this.serializeTasks(this.tasks, true) }),
+      body: JSON.stringify({
+        layoutVersion: ChecklistComponent.LAYOUT_VERSION,
+        tasks: this.serializeTasks(tasks, true),
+      }),
     }).catch(err => console.error('Failed to save template:', err));
   }
 

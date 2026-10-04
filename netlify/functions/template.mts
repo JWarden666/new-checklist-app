@@ -14,12 +14,12 @@ export default async (req: Request) => {
     if (!record) {
       return Response.json({ exists: false, tasks: [] });
     }
-    return Response.json({ exists: true, tasks: record.tasks || [], lastUpdated: record.lastUpdated || null });
+    return Response.json({ exists: true, tasks: record.tasks || [], layoutVersion: record.layoutVersion, lastUpdated: record.lastUpdated || null });
   }
 
   if (req.method === 'POST') {
     const body = await req.json();
-    const { tasks } = body;
+    const { tasks, layoutVersion } = body;
 
     if (!Array.isArray(tasks)) {
       return Response.json({ error: 'Missing tasks' }, { status: 400 });
@@ -27,6 +27,7 @@ export default async (req: Request) => {
 
     const record = {
       tasks,
+      layoutVersion,
       lastUpdated: new Date().toISOString(),
     };
     await store.setJSON(TEMPLATE_KEY, record);
