@@ -87,7 +87,7 @@
           <span class="task-status" *ngIf="task.completed">&#10003;</span>
           <span class="task-status" *ngIf="!task.completed">&#10007;</span>
           <span class="task-section-label">{{ task.section }}</span>
-          <span>{{ task.name }}</span>
+          <span><ng-container *ngIf="task.parent">{{ task.parent }} &rsaquo; </ng-container>{{ task.name }}</span>
         </li>
       </ul>
     </div>
@@ -109,25 +109,44 @@
   <div class="section-card" *ngFor="let sectionName of sections()">
     <h3>{{ sectionName }} ({{ completedTasksCount(sectionName) }}/{{ totalTasksCount(sectionName) }})</h3>
     <ul>
-      <li *ngFor="let task of getTasksBySection(sectionName)"
-          [class.selected]="selectedTask === task"
-          (click)="selectTask(task)">
+      <ng-container *ngFor="let task of getRootTasks(sectionName)">
+        <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task }"></ng-container>
+        <ng-container *ngFor="let child of getChildTasks(task)">
+          <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: child }"></ng-container>
+        </ng-container>
+      </ng-container>
+    </ul>
+  </div>
+
+  <button class="save-btn" (click)="saveHistory()">Save Today's Tasks</button>
+
+  <ng-template #taskRow let-task>
+    <li [class.selected]="selectedTask === task"
+        [class.nested-task]="task.parent"
+        (click)="selectTask(task)">
+      <div class="task-main">
         <input type="checkbox" [checked]="task.completed" (change)="toggleTask(task)" />
 
         <!-- Inline Edit -->
         <span *ngIf="!task.editing">{{ task.name }}</span>
         <input *ngIf="task.editing" type="text" [(ngModel)]="task.name" />
 
-        <!-- Buttons -->
-        <div class="task-buttons">
-          <button *ngIf="!task.editing && selectedTask === task" (click)="startEditing(task)">Edit</button>
-          <button *ngIf="task.editing" (click)="saveEdit(task, task.name)">Save</button>
-          <button *ngIf="task.editing" (click)="cancelEdit(task)">Cancel</button>
-          <button *ngIf="selectedTask === task" (click)="deleteTask(task)">Delete</button>
-        </div>
-      </li>
-    </ul>
-  </div>
+        <!-- Sub-checks (e.g. Backroom / Daily Counts) -->
+        <span class="task-checks" *ngIf="task.checks?.length">
+          <label class="task-check" *ngFor="let check of task.checks" (click)="$event.stopPropagation()">
+            <input type="checkbox" [checked]="check.completed" (change)="toggleCheck(task, check)" />
+            {{ check.label }}
+          </label>
+        </span>
+      </div>
 
-  <button class="save-btn" (click)="saveHistory()">Save Today's Tasks</button>
+      <!-- Buttons -->
+      <div class="task-buttons">
+        <button *ngIf="!task.editing && selectedTask === task" (click)="startEditing(task)">Edit</button>
+        <button *ngIf="task.editing" (click)="saveEdit(task, task.name)">Save</button>
+        <button *ngIf="task.editing" (click)="cancelEdit(task)">Cancel</button>
+        <button *ngIf="selectedTask === task" (click)="deleteTask(task)">Delete</button>
+      </div>
+    </li>
+  </ng-template>
 </div>

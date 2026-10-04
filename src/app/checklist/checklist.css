@@ -238,6 +238,37 @@ li {
 
 li.selected { background-color: #e0e0e0; }
 
+.task-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+
+li.nested-task {
+  margin-left: 28px;
+  padding-left: 10px;
+  border-left: 2px solid #c8d3ea;
+  font-size: 0.95em;
+}
+
+.task-checks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: 14px;
+}
+
+.task-check {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85em;
+  color: #333;
+  cursor: pointer;
+}
+
+.task-check input[type="checkbox"] { margin-right: 4px; }
+
 input[type="checkbox"] { margin-right: 10px; }
 
 .task-buttons button {
