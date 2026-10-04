@@ -30,11 +30,76 @@
     </span>
   </div>
 
-  <!-- History Toggle Button -->
-  <button class="history-toggle-btn" (click)="toggleHistoryView()">
-    <span *ngIf="showHistory">Hide History</span>
-    <span *ngIf="!showHistory">View History</span>
-  </button>
+  <!-- History / Schedule Toggle Buttons -->
+  <div class="toggle-row">
+    <button class="history-toggle-btn" (click)="toggleHistoryView()">
+      <span *ngIf="showHistory">Hide History</span>
+      <span *ngIf="!showHistory">View History</span>
+    </button>
+    <button class="history-toggle-btn" (click)="toggleScheduleView()">
+      <span *ngIf="showSchedule">Hide Count Schedule</span>
+      <span *ngIf="!showSchedule">Backstock Count Schedule</span>
+    </button>
+  </div>
+
+  <!-- Backstock Count Schedule Panel -->
+  <div class="history-panel schedule-panel" *ngIf="showSchedule">
+    <div class="history-panel-header">
+      <h3>Backstock / Daily Count Schedule</h3>
+      <button class="close-history-btn" (click)="toggleScheduleView()" title="Close schedule">&times;</button>
+    </div>
+    <p class="schedule-help">
+      Check the days each count is due. Only the counts due today appear in the
+      Today's Counts section of the checklist.
+    </p>
+    <p class="schedule-error" *ngIf="scheduleError">{{ scheduleError }}</p>
+
+    <table class="schedule-table" *ngIf="countSchedule.length > 0">
+      <thead>
+        <tr>
+          <th class="count-name-col">Count</th>
+          <th *ngFor="let day of weekdays; let i = index" [class.today-col]="i === getCurrentWeekdayForView()">{{ day }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let count of countSchedule">
+          <td class="count-name-col">
+            <input type="text" #nameInput [value]="count.name"
+                   (blur)="renameCount(count, nameInput.value)"
+                   (keyup.enter)="nameInput.blur()" />
+          </td>
+          <td *ngFor="let day of weekdays; let i = index" [class.today-col]="i === getCurrentWeekdayForView()">
+            <input type="checkbox" [checked]="count.days.includes(i)" (change)="toggleCountDay(count, i)"
+                   [attr.aria-label]="count.name + ' on ' + day" />
+          </td>
+          <td>
+            <button class="remove-count-btn" (click)="deleteCount(count)" title="Remove count">&times;</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="history-empty" *ngIf="countSchedule.length === 0 && !scheduleError">
+      No counts scheduled yet. Add your first count below.
+    </p>
+
+    <div class="add-count">
+      <input type="text" placeholder="New count (e.g. Cereal)" [(ngModel)]="newCountName" (keyup.enter)="addCount()" />
+      <div class="day-picker">
+        <label *ngFor="let day of weekdays; let i = index">
+          <input type="checkbox" [(ngModel)]="newCountDays[i]" /> {{ day }}
+        </label>
+      </div>
+      <button (click)="addCount()">Add Count</button>
+    </div>
+
+    <p class="schedule-today">
+      Due today: <strong>{{ countsDueToday().length }}</strong>
+      <span *ngIf="countsDueToday().length > 0"> &mdash;
+        <span *ngFor="let c of countsDueToday(); let last = last">{{ c.name }}<span *ngIf="!last">, </span></span>
+      </span>
+    </p>
+  </div>
 
   <!-- History Panel -->
   <div class="history-panel" *ngIf="showHistory">
@@ -87,7 +152,13 @@
           <span class="task-status" *ngIf="task.completed">&#10003;</span>
           <span class="task-status" *ngIf="!task.completed">&#10007;</span>
           <span class="task-section-label">{{ task.section }}</span>
-          <span>{{ task.name }}</span>
+          <span><ng-container *ngIf="task.parent">{{ task.parent }} &rsaquo; </ng-container>{{ task.name }}</span>
+          <span class="history-checks" *ngIf="task.checks?.length">
+            <span *ngFor="let check of task.checks" [class.done]="check.completed">
+              <ng-container *ngIf="check.completed">&#10003;</ng-container><ng-container *ngIf="!check.completed">&#10007;</ng-container>
+              {{ check.label }}
+            </span>
+          </span>
         </li>
       </ul>
     </div>
@@ -109,21 +180,36 @@
   <div class="section-card" *ngFor="let sectionName of sections()">
     <h3>{{ sectionName }} ({{ completedTasksCount(sectionName) }}/{{ totalTasksCount(sectionName) }})</h3>
     <ul>
-      <li *ngFor="let task of getTasksBySection(sectionName)"
+      <li *ngFor="let task of getDisplayTasks(sectionName)"
           [class.selected]="selectedTask === task"
+          [class.subtask]="!!task.parent"
           (click)="selectTask(task)">
-        <input type="checkbox" [checked]="task.completed" (change)="toggleTask(task)" />
+        <div class="task-main">
+          <input type="checkbox" [checked]="task.completed" (change)="toggleTask(task)"
+                 [disabled]="hasChildren(task)"
+                 [title]="hasChildren(task) ? 'Checks automatically when all items below are done' : ''" />
 
-        <!-- Inline Edit -->
-        <span *ngIf="!task.editing">{{ task.name }}</span>
-        <input *ngIf="task.editing" type="text" [(ngModel)]="task.name" />
+          <!-- Inline Edit -->
+          <span *ngIf="!task.editing">{{ task.name }}</span>
+          <input *ngIf="task.editing" type="text" [(ngModel)]="task.name" />
+          <span class="scheduled-tag" *ngIf="task.countId != null">Scheduled count</span>
+
+          <!-- Extra checkboxes on one item (e.g. time slots) -->
+          <div class="task-checks" *ngIf="task.checks?.length">
+            <label class="task-check" *ngFor="let check of task.checks"
+                   [class.done]="check.completed" (click)="$event.stopPropagation()">
+              <input type="checkbox" [checked]="check.completed" (change)="toggleCheck(check)" />
+              {{ check.label }}
+            </label>
+          </div>
+        </div>
 
         <!-- Buttons -->
         <div class="task-buttons">
-          <button *ngIf="!task.editing && selectedTask === task" (click)="startEditing(task)">Edit</button>
+          <button *ngIf="!task.editing && selectedTask === task && task.countId == null" (click)="startEditing(task)">Edit</button>
           <button *ngIf="task.editing" (click)="saveEdit(task, task.name)">Save</button>
           <button *ngIf="task.editing" (click)="cancelEdit(task)">Cancel</button>
-          <button *ngIf="selectedTask === task" (click)="deleteTask(task)">Delete</button>
+          <button *ngIf="selectedTask === task && task.countId == null" (click)="deleteTask(task)">Delete</button>
         </div>
       </li>
     </ul>
