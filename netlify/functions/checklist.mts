@@ -1,5 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import type { Config, Context } from '@netlify/functions';
+import { applyCompletions, getCompletions } from '../lib/gospotcheck.mts';
 
 const STORE_NAME = 'checklist-live';
 
@@ -19,10 +20,13 @@ export default async (req: Request, context: Context) => {
       return Response.json({ exists: false, version: 0, tasks: [] });
     }
 
+    // Make sure GoSpotCheck-completed items always show as checked
+    const tasks = applyCompletions(record.tasks || [], await getCompletions(dateParam));
+
     return Response.json({
       exists: true,
       version: record.version || 0,
-      tasks: record.tasks || [],
+      tasks,
       lastUpdated: record.lastUpdated || null,
     });
   }
@@ -41,9 +45,11 @@ export default async (req: Request, context: Context) => {
     const currentVersion = existing?.version || 0;
     const newVersion = currentVersion + 1;
 
+    // Keep items completed in GoSpotCheck checked, even if a device
+    // saves a list it loaded before the sync happened.
     const record = {
       date,
-      tasks,
+      tasks: Array.isArray(tasks) ? applyCompletions(tasks, await getCompletions(date)) : tasks,
       version: newVersion,
       lastUpdated: new Date().toISOString(),
     };
