@@ -30,6 +30,74 @@
     </span>
   </div>
 
+  <!-- GoSpotCheck Integration -->
+  <div class="gsc-bar">
+    <button class="gsc-sync-btn" (click)="syncGoSpotCheck()" [disabled]="gscSyncing || (!gscConfigured && !gscMock)"
+            [title]="gscMock ? 'Demo mode: test mission links with sample data' : 'Pull completed missions from GoSpotCheck'">
+      <span class="refresh-icon" [class.spinning]="gscSyncing">&#x21bb;</span>
+      {{ gscSyncing ? 'Syncing GoSpotCheck...' : (gscMock ? 'Test GoSpotCheck (demo)' : 'Sync GoSpotCheck') }}
+    </button>
+    <button class="gsc-settings-btn" (click)="toggleGscPanel()">
+      {{ showGsc ? 'Hide' : 'Mission Links' }}
+    </button>
+    <span class="gsc-last-sync" *ngIf="gscLastSync">
+      Last sync {{ gscLastSync.syncedAt | date: 'shortTime' }}
+      <span *ngIf="!gscLastSync.ok" class="gsc-error">(failed)</span>
+    </span>
+  </div>
+  <p class="gsc-message" *ngIf="gscMessage && !showGsc">{{ gscMessage }}</p>
+
+  <div class="gsc-panel" *ngIf="showGsc">
+    <div class="history-panel-header">
+      <h3>GoSpotCheck Mission Links</h3>
+      <button class="close-history-btn" (click)="toggleGscPanel()" title="Close">&times;</button>
+    </div>
+
+    <p class="gsc-warning" *ngIf="gscMock">
+      <strong>Demo mode:</strong> no GoSpotCheck API key is set, so syncing uses sample data and only shows
+      which items <em>would</em> be checked off. Nothing on the checklist changes until the API key is added.
+    </p>
+    <p class="gsc-warning" *ngIf="!gscConfigured && !gscMock">
+      GoSpotCheck is not connected. Add the company ID to the site's environment variables.
+    </p>
+    <p class="gsc-help">
+      Enter the GoSpotCheck mission ID for each checklist item. When a mission job is completed today,
+      the item is checked off automatically (every 10 minutes, or when you press Sync).
+      If several items share one mission, use "Job name contains" to tell them apart (e.g. "Bakery").
+    </p>
+
+    <div class="gsc-place">
+      <label for="gscPlace">Store (place) ID <small>(optional)</small></label>
+      <input id="gscPlace" type="number" inputmode="numeric" [(ngModel)]="gscPlaceId" placeholder="All stores" />
+      <label for="gscFilter">Show</label>
+      <select id="gscFilter" [(ngModel)]="gscSectionFilter" class="section-select">
+        <option *ngFor="let s of gscSections()" [value]="s">{{ s === 'Walks' ? 'Leader walks' : s }}</option>
+      </select>
+    </div>
+
+    <p *ngIf="gscLoading" class="history-loading">Loading...</p>
+
+    <table class="gsc-table" *ngIf="!gscLoading">
+      <thead>
+        <tr><th>Checklist item</th><th>Mission ID</th><th>Job name contains</th></tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of filteredGscRows()">
+          <td><span class="task-section-label">{{ row.section }}</span> {{ row.name }}</td>
+          <td><input type="number" inputmode="numeric" [(ngModel)]="row.missionId" placeholder="—" /></td>
+          <td><input type="text" [(ngModel)]="row.jobNameContains" placeholder="optional" /></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="gsc-actions">
+      <span>{{ gscMappedCount }} item{{ gscMappedCount === 1 ? '' : 's' }} linked</span>
+      <button (click)="saveGscMappings()" [disabled]="gscSaving">{{ gscSaving ? 'Saving...' : 'Save Links' }}</button>
+      <button (click)="syncGoSpotCheck()" [disabled]="gscSyncing || (!gscConfigured && !gscMock)">{{ gscMock ? 'Test Links' : 'Sync Now' }}</button>
+    </div>
+    <p class="gsc-message" *ngIf="gscMessage">{{ gscMessage }}</p>
+  </div>
+
   <!-- History Toggle Button -->
   <button class="history-toggle-btn" (click)="toggleHistoryView()">
     <span *ngIf="showHistory">Hide History</span>
@@ -112,10 +180,12 @@
       <li *ngFor="let task of getTasksBySection(sectionName)"
           [class.selected]="selectedTask === task"
           (click)="selectTask(task)">
-        <input type="checkbox" [checked]="task.completed" (change)="toggleTask(task)" />
+        <input type="checkbox" [checked]="task.completed" (change)="toggleTask(task, $event)" />
 
         <!-- Inline Edit -->
         <span *ngIf="!task.editing">{{ task.name }}</span>
+        <span class="gsc-badge" *ngIf="task.gscCompletedAt && !task.editing"
+              [title]="'Completed in GoSpotCheck at ' + (task.gscCompletedAt | date: 'shortTime')">GSC</span>
         <input *ngIf="task.editing" type="text" [(ngModel)]="task.name" />
 
         <!-- Buttons -->

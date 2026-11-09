@@ -7,6 +7,25 @@ export interface Task {
   name: string;
   completed: boolean;
   editing?: boolean; // for inline editing
+  gscCompletedAt?: string; // set when auto-completed from GoSpotCheck
+}
+
+export interface GscMappingRow {
+  section: string;
+  name: string;
+  missionId: string;
+  jobNameContains: string;
+}
+
+export interface GscSyncResult {
+  ok: boolean;
+  syncedAt: string;
+  newlyCompleted: string[];
+  totalCompleted: number;
+  checkedMissions: number;
+  error?: string;
+  mock?: boolean;
+  wouldComplete?: string[];
 }
 
 export interface TaskHistory {
@@ -44,6 +63,20 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   newTaskName: string = '';
   newTaskSection: string = '';
+
+  // GoSpotCheck integration state
+  showGsc: boolean = false;
+  gscConfigured: boolean = false;
+  gscMock: boolean = false;
+  gscLoading: boolean = false;
+  gscSaving: boolean = false;
+  gscSyncing: boolean = false;
+  gscPlaceId: string = '';
+  gscRows: GscMappingRow[] = [];
+  gscLastSync: GscSyncResult | null = null;
+  gscMessage: string = '';
+  gscSectionFilter: string = 'Walks';
+  private gscSyncInterval: ReturnType<typeof setInterval> | null = null;
 
   // Cloud sync state
   syncStatus: 'synced' | 'syncing' | 'offline' | 'error' = 'synced';
@@ -166,6 +199,13 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     this.dateKey = this.getPacificDateKey();
     this.loadFromCloud();
     this.startPolling();
+    this.loadGscStatus();
+    // While the app is open, pull GoSpotCheck completions every 2 minutes
+    this.gscSyncInterval = setInterval(() => {
+      if (this.gscConfigured && document.visibilityState === 'visible') {
+        this.syncGoSpotCheck(true);
+      }
+    }, 120000);
 
     // Listen for visibility and focus changes to sync across devices
     document.addEventListener('visibilitychange', this.boundVisibilityHandler);
@@ -174,6 +214,9 @@ export class ChecklistComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopPolling();
+    if (this.gscSyncInterval) {
+      clearInterval(this.gscSyncInterval);
+    }
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
     }
@@ -238,6 +281,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
           section: t.section,
           name: t.name,
           completed: t.completed,
+          ...(t.gscCompletedAt ? { gscCompletedAt: t.gscCompletedAt } : {}),
         })),
       };
 
@@ -389,7 +433,13 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   }
 
   // ------------------- Task Management -------------------
-  toggleTask(task: Task) {
+  toggleTask(task: Task, event?: Event) {
+    if (task.gscCompletedAt && task.completed) {
+      // Completed in GoSpotCheck — that is the source of truth
+      if (event?.target instanceof HTMLInputElement) event.target.checked = true;
+      alert('This item was completed in GoSpotCheck and cannot be unchecked here.');
+      return;
+    }
     task.completed = !task.completed;
     this.saveTasksToLocal();
     this.debouncedSaveToCloud();
@@ -565,5 +615,117 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     this.historyTasks = [];
     this.historyCompletion = 0;
     this.selectedHistoryDate = '';
+  }
+
+  // ------------------- GoSpotCheck -------------------
+  toggleGscPanel() {
+    this.showGsc = !this.showGsc;
+    if (this.showGsc) this.loadGscStatus();
+  }
+
+  gscSections(): string[] {
+    return ['Walks', 'All', ...this.sections()];
+  }
+
+  filteredGscRows(): GscMappingRow[] {
+    if (this.gscSectionFilter === 'All') return this.gscRows;
+    if (this.gscSectionFilter === 'Walks') {
+      return this.gscRows.filter(r => r.section === 'Store Leader Walk' || r.section === 'Dept Leader');
+    }
+    return this.gscRows.filter(r => r.section === this.gscSectionFilter);
+  }
+
+  get gscMappedCount(): number {
+    return this.gscRows.filter(r => Number(r.missionId) > 0).length;
+  }
+
+  async loadGscStatus(): Promise<void> {
+    this.gscLoading = true;
+    try {
+      const res = await fetch('/api/gospotcheck/config');
+      if (!res.ok) throw new Error('Failed to load GoSpotCheck settings');
+      const data = await res.json();
+      this.gscConfigured = !!data.configured;
+      this.gscMock = !!data.mock;
+      this.gscLastSync = data.lastSync;
+      this.gscPlaceId = data.config?.placeId ? String(data.config.placeId) : '';
+      const saved = new Map<string, any>(
+        (data.config?.mappings || []).map((m: any) => [`${m.section}::${m.name}`, m])
+      );
+      this.gscRows = this.tasks.map(t => {
+        const m = saved.get(`${t.section}::${t.name}`);
+        return {
+          section: t.section,
+          name: t.name,
+          missionId: m ? String(m.missionId) : '',
+          jobNameContains: m?.jobNameContains || '',
+        };
+      });
+    } catch (err) {
+      console.error(err);
+      this.gscMessage = 'Could not load GoSpotCheck settings.';
+    } finally {
+      this.gscLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async saveGscMappings(): Promise<void> {
+    this.gscSaving = true;
+    this.gscMessage = '';
+    try {
+      const mappings = this.gscRows
+        .filter(r => Number(r.missionId) > 0)
+        .map(r => ({
+          section: r.section,
+          name: r.name,
+          missionId: Number(r.missionId),
+          jobNameContains: r.jobNameContains.trim() || undefined,
+        }));
+      const res = await fetch('/api/gospotcheck/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeId: this.gscPlaceId ? Number(this.gscPlaceId) : null, mappings }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      this.gscMessage = `Saved ${mappings.length} mission link${mappings.length === 1 ? '' : 's'}.`;
+    } catch (err) {
+      console.error(err);
+      this.gscMessage = 'Could not save mission links.';
+    } finally {
+      this.gscSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async syncGoSpotCheck(silent = false): Promise<void> {
+    if (this.gscSyncing) return;
+    this.gscSyncing = true;
+    if (!silent) this.gscMessage = '';
+    try {
+      const res = await fetch('/api/gospotcheck/sync', { method: 'POST' });
+      const result: GscSyncResult = await res.json();
+      this.gscLastSync = result;
+      if (!silent) {
+        this.gscMessage = result.mock
+          ? `Demo mode (sample data, nothing changed): ` + (result.wouldComplete?.length
+              ? `would check off ${result.wouldComplete.join(', ')}`
+              : 'no linked items to check off.')
+          : result.ok
+          ? result.newlyCompleted.length
+            ? `Checked off: ${result.newlyCompleted.join(', ')}`
+            : 'No new completed missions found.'
+          : `Sync failed: ${result.error}`;
+      }
+      if (result.ok && result.newlyCompleted.length) {
+        await this.refreshData();
+      }
+    } catch (err) {
+      console.error('GoSpotCheck sync failed:', err);
+      if (!silent) this.gscMessage = 'Sync failed. Please try again.';
+    } finally {
+      this.gscSyncing = false;
+      this.cdr.markForCheck();
+    }
   }
 }
