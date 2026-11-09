@@ -65,10 +65,12 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   private static readonly LEGACY_COUNT_TASK = 'Daily Backroom Counts';
   // Permanently retired section: always dropped from saved days and never offered for restore
   private static readonly BACKROOM_SECTION = 'Backroom/Daily Counts';
+  // Retired section whose Freezers task moved to Equipment Inspections
+  private static readonly COMPLIANCE_SECTION = 'Compliance';
   // Items added to the defaults after days were already saved; merged into saved days if missing
   private static readonly ADDED_DEFAULTS: { section: string; name: string }[] = [
     { section: 'Replenishment', name: 'Top Stock' },
-    { section: 'Compliance', name: 'Freezers' },
+    { section: 'Equipment Inspections', name: 'Freezers' },
     { section: 'PDM', name: 'Markdowns' },
   ];
   readonly weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -166,6 +168,7 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Equipment Inspections', name: 'Slicers', completed: false },
     { section: 'Equipment Inspections', name: 'Meat Saw', completed: false },
     { section: 'Equipment Inspections', name: 'Grinder', completed: false },
+    { section: 'Equipment Inspections', name: 'Freezers', completed: false },
     { section: 'Fresh Production', name: 'Bakery', completed: false },
     { section: 'Fresh Production', parent: 'Bakery', name: 'Prep for Today', completed: false },
     { section: 'Fresh Production', parent: 'Bakery', name: 'Prep for Tomorrow', completed: false },
@@ -185,7 +188,6 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     { section: 'Replenishment', name: 'HABA', completed: false },
     { section: 'Replenishment', name: 'Produce', completed: false },
     { section: 'Replenishment', name: 'Top Stock', completed: false, checks: this.makeChecks(['HABA', 'Grocery']) },
-    { section: 'Compliance', name: 'Freezers', completed: false },
     { section: 'PDM', name: 'Markdowns', completed: false },
     ];
   }
@@ -207,10 +209,14 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       defaults.some(d => !d.parent && d.section === t.section && d.name === t.name);
     const isDefaultSubItem = (t: Task) =>
       defaults.some(d => d.parent && d.section === t.section && d.name === t.name);
+    // Freezers moved from the retired Compliance section; carry over a check already made today
+    const freezersDone = tasks.some(t =>
+      t.section === ChecklistComponent.COMPLIANCE_SECTION && t.name === 'Freezers' && t.completed);
     for (let i = tasks.length - 1; i >= 0; i--) {
       const t = tasks[i];
       if (this.removedSections.includes(t.section) ||
-          t.section === ChecklistComponent.BACKROOM_SECTION) {
+          t.section === ChecklistComponent.BACKROOM_SECTION ||
+          t.section === ChecklistComponent.COMPLIANCE_SECTION) {
         tasks.splice(i, 1);
         changed = true;
         continue;
@@ -243,6 +249,14 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       }
     }
     changed = this.mergeAddedDefaults(tasks) || changed;
+    if (freezersDone) {
+      const freezers = tasks.find(t =>
+        !t.parent && t.section === 'Equipment Inspections' && t.name === 'Freezers');
+      if (freezers && !freezers.completed) {
+        freezers.completed = true;
+        changed = true;
+      }
+    }
     changed = this.mergeDefaultSubItems(tasks) || changed;
     const before = tasks.map(t => t.completed).join();
     this.syncParents(tasks);
@@ -725,7 +739,8 @@ export class ChecklistComponent implements OnInit, OnDestroy {
       const res = await fetch('/api/sections/removed');
       if (!res.ok) throw new Error('Failed to load removed sections');
       const names: string[] = await res.json();
-      this.removedSections = names.filter(n => n !== ChecklistComponent.BACKROOM_SECTION);
+      this.removedSections = names.filter(n =>
+        n !== ChecklistComponent.BACKROOM_SECTION && n !== ChecklistComponent.COMPLIANCE_SECTION);
     } catch (err) {
       console.error('Failed to load removed sections:', err);
     }
