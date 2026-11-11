@@ -34,41 +34,52 @@ export async function buildChecklistWorkbook(date: string, tasks: Task[]): Promi
   const pct = total ? Math.round((done / total) * 100) : 0;
   const sections = [...new Set(tasks.map(t => t.section))];
 
-  // ---- Checklist sheet ----
-  const ws = wb.addWorksheet('Checklist', {
+  // ---- Tasks sheet: every individual task and whether it was completed ----
+  const ws = wb.addWorksheet('Tasks', {
     views: [{ state: 'frozen', ySplit: 5 }],
     pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
-  ws.columns = [{ width: 26 }, { width: 58 }, { width: 16 }];
+  ws.columns = [{ width: 6 }, { width: 24 }, { width: 56 }, { width: 14 }];
 
-  ws.mergeCells('A1:C1');
+  ws.mergeCells('A1:D1');
   const title = ws.getCell('A1');
   title.value = `Checklist - ${formatDate(date)}`;
   title.font = { bold: true, size: 16, color: { argb: BLUE } };
 
+  ws.mergeCells('A2:B2');
+  ws.mergeCells('A3:B3');
   ws.getCell('A2').value = 'Completion';
-  ws.getCell('B2').value = `${pct}% (${done} of ${total} tasks completed)`;
+  ws.getCell('C2').value = `${pct}% (${done} of ${total} tasks completed)`;
   ws.getCell('A3').value = 'Exported';
-  ws.getCell('B3').value = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) + ' PT';
+  ws.getCell('C3').value = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) + ' PT';
   ws.getCell('A2').font = ws.getCell('A3').font = { bold: true };
 
   const header = ws.getRow(5);
-  header.values = ['Section', 'Task', 'Status'];
+  header.values = ['#', 'Section', 'Task', 'Completed?'];
   header.eachCell(c => {
     c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLUE } };
+    c.alignment = { vertical: 'middle' };
   });
+  header.getCell(4).alignment = { horizontal: 'center' };
 
+  const thin = { style: 'thin' as const, color: { argb: 'FFD0D7E5' } };
+  let n = 0;
   for (const section of sections) {
     for (const t of tasks.filter(x => x.section === section)) {
-      const row = ws.addRow([t.section, t.name, t.completed ? 'Complete' : 'Not complete']);
-      const status = row.getCell(3);
+      n++;
+      const row = ws.addRow([n, t.section, t.name, t.completed ? '✓ Yes' : '✗ No']);
+      const status = row.getCell(4);
+      status.alignment = { horizontal: 'center', vertical: 'top' };
       status.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: t.completed ? GREEN_BG : RED_BG } };
       status.font = { bold: true, color: { argb: t.completed ? 'FF2E7D32' : 'FFC62828' } };
-      row.getCell(2).alignment = { wrapText: true, vertical: 'top' };
+      row.getCell(1).alignment = { horizontal: 'center', vertical: 'top' };
+      row.getCell(2).alignment = { vertical: 'top' };
+      row.getCell(3).alignment = { wrapText: true, vertical: 'top' };
+      row.eachCell(c => (c.border = { top: thin, bottom: thin, left: thin, right: thin }));
     }
   }
-  ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: 3 } };
+  ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: 4 } };
 
   // ---- Summary sheet ----
   const sum = wb.addWorksheet('Summary by Section');
