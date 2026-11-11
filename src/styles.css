@@ -10,3 +10,18 @@ body {
 * {
   box-sizing: border-box;
 }
+/* Excel export / email controls */
+.export-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.export-btn {
+  background-color: #2e7d32; color: #fff; border: none; padding: 8px 14px;
+  border-radius: 5px; cursor: pointer; font-weight: 600; transition: background-color 0.2s ease;
+}
+.export-btn:hover:not(:disabled) { background-color: #1b5e20; }
+.export-btn:disabled { opacity: 0.6; cursor: default; }
+.export-btn.secondary { background-color: #fff; color: #0033a0; border: 1px solid #0033a0; }
+.export-btn.secondary:hover:not(:disabled) { background-color: #e8eefc; }
+.export-message {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: #e8f5e9; color: #1b5e20; padding: 8px 12px; border-radius: 5px; margin-bottom: 10px;
+}
+@media (max-width: 600px) { .export-bar .export-btn { flex: 1 1 auto; } }

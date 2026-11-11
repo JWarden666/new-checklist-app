@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { buildChecklistWorkbook, downloadFile, emailFile, loadExcel, ExportedFile } from '../checklist-export';
 
 export interface Task {
   section: string;
@@ -41,6 +42,11 @@ export class ChecklistComponent implements OnInit, OnDestroy {
   historyList: HistorySummary[] = [];
   historyLoading: boolean = false;
   selectedHistoryDate: string = '';
+
+  // Excel export state
+  exportBusy: boolean = false;
+  exportMessage: string = '';
+  pendingShare: ExportedFile | null = null;
 
   newTaskName: string = '';
   newTaskSection: string = '';
@@ -170,6 +176,10 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     // Listen for visibility and focus changes to sync across devices
     document.addEventListener('visibilitychange', this.boundVisibilityHandler);
     window.addEventListener('focus', this.boundFocusHandler);
+
+    // Preload the Excel library in the background so exports start instantly
+    // (keeps the share sheet within the browser's "user tap" window).
+    setTimeout(() => loadExcel().catch(() => {}), 2000);
   }
 
   ngOnDestroy(): void {
@@ -565,5 +575,78 @@ export class ChecklistComponent implements OnInit, OnDestroy {
     this.historyTasks = [];
     this.historyCompletion = 0;
     this.selectedHistoryDate = '';
+  }
+
+  // ------------------- Excel Export / Email -------------------
+  private exportTasks(source: 'today' | 'history'): { date: string; tasks: Task[] } {
+    if (source === 'history') {
+      return { date: this.selectedHistoryDate, tasks: this.historyTasks };
+    }
+    return { date: this.dateKey, tasks: this.tasks };
+  }
+
+  async downloadExcel(source: 'today' | 'history' = 'today'): Promise<void> {
+    if (this.exportBusy) return;
+    const { date, tasks } = this.exportTasks(source);
+    this.exportBusy = true;
+    this.exportMessage = '';
+    this.pendingShare = null;
+    try {
+      const exp = await buildChecklistWorkbook(date, tasks);
+      downloadFile(exp.file);
+      this.exportMessage = `Downloaded ${exp.file.name}`;
+    } catch (err) {
+      console.error('Excel export failed:', err);
+      this.exportMessage = 'Export failed — please try again.';
+    } finally {
+      this.exportBusy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async emailExcel(source: 'today' | 'history' = 'today'): Promise<void> {
+    if (this.exportBusy) return;
+    const { date, tasks } = this.exportTasks(source);
+    this.exportBusy = true;
+    this.exportMessage = '';
+    this.pendingShare = null;
+    try {
+      const exp = await buildChecklistWorkbook(date, tasks);
+      await this.shareExport(exp);
+    } catch (err) {
+      console.error('Excel export failed:', err);
+      this.exportMessage = 'Export failed — please try again.';
+    } finally {
+      this.exportBusy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** Second tap when the browser blocked the share sheet after preparing the file. */
+  async sharePending(): Promise<void> {
+    const exp = this.pendingShare;
+    if (!exp) return;
+    this.pendingShare = null;
+    await this.shareExport(exp);
+    this.cdr.markForCheck();
+  }
+
+  private async shareExport(exp: ExportedFile): Promise<void> {
+    const result = await emailFile(exp);
+    switch (result) {
+      case 'shared':
+        this.exportMessage = 'Checklist shared.';
+        break;
+      case 'cancelled':
+        this.exportMessage = '';
+        break;
+      case 'needs-tap':
+        this.pendingShare = exp;
+        this.exportMessage = 'Your Excel file is ready.';
+        break;
+      case 'fallback':
+        this.exportMessage = `Downloaded ${exp.file.name} — attach it to the email that opened.`;
+        break;
+    }
   }
 }

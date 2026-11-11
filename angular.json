@@ -25,6 +25,7 @@
                 "input": "public"
               }
             ],
+            "allowedCommonJsDependencies": ["exceljs"],
             "styles": [
               "src/styles.css"
             ]

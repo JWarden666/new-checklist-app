@@ -30,6 +30,20 @@
     </span>
   </div>
 
+  <!-- Excel Export / Email -->
+  <div class="export-bar">
+    <button class="export-btn" (click)="emailExcel('today')" [disabled]="exportBusy">
+      {{ exportBusy ? 'Preparing…' : '✉ Email Excel' }}
+    </button>
+    <button class="export-btn secondary" (click)="downloadExcel('today')" [disabled]="exportBusy">
+      ⬇ Download Excel
+    </button>
+  </div>
+  <div class="export-message" *ngIf="exportMessage || pendingShare">
+    <span>{{ exportMessage }}</span>
+    <button class="export-btn" *ngIf="pendingShare" (click)="sharePending()">Tap to share / email</button>
+  </div>
+
   <!-- History Toggle Button -->
   <button class="history-toggle-btn" (click)="toggleHistoryView()">
     <span *ngIf="showHistory">Hide History</span>
@@ -78,6 +92,10 @@
         <button class="back-btn" (click)="closeHistoryDetail()">Back to List</button>
         <h4>{{ selectedHistoryDate }}</h4>
         <p>Completion: {{ historyCompletion }}%</p>
+        <div class="export-bar">
+          <button class="export-btn" (click)="emailExcel('history')" [disabled]="exportBusy || historyTasks.length === 0">✉ Email Excel</button>
+          <button class="export-btn secondary" (click)="downloadExcel('history')" [disabled]="exportBusy || historyTasks.length === 0">⬇ Download Excel</button>
+        </div>
       </div>
       <div class="history-progress-bar large">
         <div class="history-progress-fill" [style.width.%]="historyCompletion"></div>
